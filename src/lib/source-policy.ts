@@ -1,6 +1,6 @@
 import type { ResearchSource, SourceRiskLevel } from "@/types/task";
 
-type RawSource = Pick<ResearchSource, "title" | "url" | "content">;
+export type RawResearchSource = Pick<ResearchSource, "title" | "url" | "content">;
 
 const injectionSignals = [
   /ignore\s+(all\s+)?previous\s+instructions?/i,
@@ -34,7 +34,7 @@ function sanitizeContent(content: string) {
     .slice(0, 1800);
 }
 
-function assessSource(source: RawSource): ResearchSource | null {
+function assessSource(source: RawResearchSource): ResearchSource | null {
   let parsed: URL;
   try {
     parsed = new URL(source.url);
@@ -69,7 +69,7 @@ function assessSource(source: RawSource): ResearchSource | null {
   };
 }
 
-export function screenSources(rawSources: RawSource[]) {
+export function screenSources(rawSources: RawResearchSource[], limit = 6) {
   const seen = new Set<string>();
   const assessed = rawSources.flatMap((source) => {
     const result = assessSource(source);
@@ -80,7 +80,7 @@ export function screenSources(rawSources: RawSource[]) {
   const eligible = assessed.filter((source) => source.riskLevel !== "high" && source.qualityScore >= 35);
   const sources = eligible
     .sort((a, b) => b.qualityScore - a.qualityScore)
-    .slice(0, 6);
+    .slice(0, Math.max(1, Math.min(10, limit)));
   return { sources, rejectedCount: rawSources.length - eligible.length };
 }
 
