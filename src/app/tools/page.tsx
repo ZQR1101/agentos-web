@@ -1,2 +1,24 @@
-const tools = [["research_search", "MCP", "只读", "需要批准", "检索公开网页来源"], ["read_workspace", "Built-in", "只读", "自动允许", "读取任务相关文件"], ["write_report", "Skill", "写入", "需要批准", "导出调研报告"]];
-export default function ToolsPage() { return <main className="mx-auto max-w-6xl p-6 lg:p-9"><p className="text-sm font-medium text-indigo-600">PERMISSION POLICY</p><h1 className="mt-1 text-3xl font-semibold">工具与权限</h1><p className="mt-2 text-sm text-slate-500">Harness 在工具执行前检查风险等级与用户审批策略。</p><div className="mt-8 space-y-3">{tools.map(([name, type, scope, approval, desc]) => <section key={name} className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white p-5"><div className="min-w-52 flex-1"><p className="font-mono text-sm font-medium">{name}</p><p className="mt-1 text-sm text-slate-500">{desc}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{type}</span><span className="text-sm text-slate-600">{scope}</span><span className={`rounded-full px-3 py-1 text-xs ${approval === "需要批准" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{approval}</span></section>)}</div></main>; }
+import { toolRegistry } from "@/lib/tool-policy";
+
+const approvalLabel = { required: "需要批准", automatic: "自动允许" } as const;
+
+export default function ToolsPage() {
+  return (
+    <main className="mx-auto max-w-6xl p-6 lg:p-9">
+      <p className="text-sm font-medium text-indigo-600">PERMISSION POLICY</p>
+      <h1 className="mt-1 text-3xl font-semibold">工具与权限</h1>
+      <p className="mt-2 text-sm text-slate-500">页面直接读取服务端 Tool Registry；未注册、禁用、越权或未审批的调用默认拒绝。</p>
+      <div className="mt-8 space-y-3">
+        {toolRegistry.map((tool) => (
+          <section key={tool.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white p-5">
+            <div className="min-w-60 flex-1"><p className="font-mono text-sm font-medium">{tool.id}</p><p className="mt-1 text-sm text-slate-500">{tool.description}</p></div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase text-slate-600">{tool.type}</span>
+            <span className="text-sm text-slate-600">{tool.scope === "read" ? "只读" : "写入"}</span>
+            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-700">{approvalLabel[tool.approval]}</span>
+            <span className={`rounded-full px-3 py-1 text-xs ${tool.enabled ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{tool.enabled ? "已启用" : "已禁用"}</span>
+          </section>
+        ))}
+      </div>
+    </main>
+  );
+}
