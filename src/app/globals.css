@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7fb;
+  --foreground: #172033;
+  --muted: #64748b;
+  --line: #e4e8f0;
+  --panel: #ffffff;
+  --brand: #4f46e5;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button, input { font: inherit; }
+
+.report-markdown h1 { margin: 0 0 1rem; font-size: 1.5rem; font-weight: 600; color: #172033; }
+.report-markdown h2 { margin: 1.5rem 0 .6rem; font-size: 1.15rem; font-weight: 600; color: #172033; }
+.report-markdown h3 { margin: 1.25rem 0 .5rem; font-size: 1rem; font-weight: 600; color: #172033; }
+.report-markdown p { margin: .6rem 0; line-height: 1.8; }
+.report-markdown ul, .report-markdown ol { margin: .6rem 0; padding-left: 1.4rem; }
+.report-markdown ul { list-style: disc; }
+.report-markdown ol { list-style: decimal; }
+.report-markdown li { margin: .35rem 0; line-height: 1.75; }
+.report-markdown a { color: #4338ca; text-decoration: underline; text-underline-offset: 2px; }
+.report-markdown strong { font-weight: 600; color: #172033; }
