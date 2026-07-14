@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import { createHarnessBudget, type HarnessActionKind } from "@/lib/harness-budget";
 import { searchWithResearchMcp } from "@/lib/mcp/research-client";
 import { validateReportCitations } from "@/lib/source-policy";
 import { getTask, transitionTask, updateTask } from "@/lib/task-store";
@@ -81,44 +82,67 @@ export async function POST(request: Request) {
   }
   const task = claim.task;
   const events = [...(task.events ?? [])];
+  const budget = createHarnessBudget();
+  const authorize = async (kind: HarnessActionKind, label: string, currentStep: number) => {
+    const harnessBudget = budget.consume(kind, label);
+    const { usage, limits } = harnessBudget;
+    events.push(`Harness 授权：${label}（步骤 ${usage.steps}/${limits.maxSteps} · 模型 ${usage.modelCalls}/${limits.maxModelCalls} · 工具 ${usage.toolCalls}/${limits.maxToolCalls}）`);
+    await updateTask(task.id, { currentStep, harnessBudget, events });
+  };
   try {
-    const client = new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" });
+    const client = new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com", timeout: 45_000, maxRetries: 1 });
+    events.push("Harness 预算已启用：最大 8 步 · 模型 5 次 · 工具 3 次 · 总耗时 180 秒");
+    await updateTask(task.id, { harnessBudget: budget.snapshot(), events });
+    await authorize("model", "Planner 模型调用", 2);
     const plan = await runPlanner(client, task.topic);
+    budget.assertWithinDuration("Planner 完成");
     events.push(`Planner 完成：${plan.subquestions.length} 个子问题`);
-    await updateTask(task.id, { plan, currentStep: 3, events });
+    await updateTask(task.id, { plan, currentStep: 3, harnessBudget: budget.snapshot(), events });
+    await authorize("tool", "Research MCP/search_web", 3);
     const mcpResult = await searchWithResearchMcp(plan.searchQuery);
+    budget.assertWithinDuration("Research MCP 完成");
     const sources = mcpResult.sources;
     events.push(`MCP Client 发现并调用 ${mcpResult.trace.serverName}/${mcpResult.trace.toolName}`);
     events.push(`MCP 搜索完成：共尝试 ${mcpResult.searchAttempts} 次`);
     if (!sources.length) throw new Error(`连续 ${mcpResult.searchAttempts} 次搜索均未找到可用网页来源。`);
     events.push(`Source Policy 完成：保留 ${sources.length} 个来源，隔离 ${mcpResult.rejectedCount} 个`);
-    await updateTask(task.id, { sources, mcp: mcpResult.trace, currentStep: 4, events });
+    await updateTask(task.id, { sources, mcp: mcpResult.trace, currentStep: 4, harnessBudget: budget.snapshot(), events });
     let attempts = 1;
+    await authorize("model", "Executor 模型调用", 4);
     let written = await runWriter(client, task.topic, plan, sources);
+    budget.assertWithinDuration("Executor 完成");
     events.push("Executor 完成第一版报告");
-    await updateTask(task.id, { currentStep: 5, events });
+    await updateTask(task.id, { currentStep: 5, harnessBudget: budget.snapshot(), events });
+    await authorize("model", "Reviewer 模型调用", 5);
     let review = await runReviewer(client, task.topic, plan, written.report, sources);
+    budget.assertWithinDuration("Reviewer 完成");
     events.push(`Reviewer 评分：${review.score}，${review.approved ? "通过" : "需要修订"}`);
-    await updateTask(task.id, { review, attempts, events });
+    await updateTask(task.id, { review, attempts, harnessBudget: budget.snapshot(), events });
     if (!review.approved) {
       attempts = 2;
       events.push("Harness 触发一次修订");
       await updateTask(task.id, { attempts, events });
+      await authorize("model", "Executor 修订调用", 4);
       written = await runWriter(client, task.topic, plan, sources, review.revisionInstructions);
+      budget.assertWithinDuration("Executor 修订完成");
       events.push("Executor 完成修订版报告");
-      await updateTask(task.id, { events });
+      await updateTask(task.id, { harnessBudget: budget.snapshot(), events });
+      await authorize("model", "Reviewer 复核调用", 5);
       review = await runReviewer(client, task.topic, plan, written.report, sources);
+      budget.assertWithinDuration("Reviewer 复核完成");
       events.push(`Reviewer 复核评分：${review.score}，${review.approved ? "通过" : "未通过"}`);
-      await updateTask(task.id, { review, attempts, events });
+      await updateTask(task.id, { review, attempts, harnessBudget: budget.snapshot(), events });
     }
     if (!review.approved) throw new Error(`Reviewer 未通过：${review.issues.join("；")}`);
-    const completed = await updateTask(task.id, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, mcp: mcpResult.trace, attempts, events, model, responseId: written.responseId, completedAt: new Date().toISOString() });
+    const harnessBudget = budget.snapshot();
+    events.push(`Harness 预算结算：${harnessBudget.usage.steps}/${harnessBudget.limits.maxSteps} 步 · ${harnessBudget.usage.modelCalls}/${harnessBudget.limits.maxModelCalls} 次模型 · ${harnessBudget.usage.toolCalls}/${harnessBudget.limits.maxToolCalls} 次工具`);
+    const completed = await updateTask(task.id, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, mcp: mcpResult.trace, harnessBudget, attempts, events, model, responseId: written.responseId, completedAt: new Date().toISOString() });
     if (!completed) throw new Error("任务在完成持久化时丢失。");
     return NextResponse.json(completedPayload(completed));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Multi-Agent 执行失败。";
     events.push(message);
-    await updateTask(task.id, { status: "failed", error: message, events });
+    await updateTask(task.id, { status: "failed", error: message, harnessBudget: budget.snapshot(), events });
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

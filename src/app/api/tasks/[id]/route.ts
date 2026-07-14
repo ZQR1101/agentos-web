@@ -21,6 +21,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           executionId: undefined,
           startedAt: undefined,
           completedAt: undefined,
+          report: undefined,
+          sources: undefined,
+          plan: undefined,
+          review: undefined,
+          mcp: undefined,
+          harnessBudget: undefined,
+          model: undefined,
+          responseId: undefined,
+          attempts: 0,
           events: [...(task.events ?? []), "失败任务已重置"],
         }))
         : null;

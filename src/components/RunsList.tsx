@@ -45,7 +45,7 @@ export default function RunsList() {
           <div key={task.id} className="grid grid-cols-[1.5fr_.7fr_.55fr_.7fr_.4fr] items-center border-b border-slate-100 px-5 py-5 text-sm last:border-0">
             <div><p className="font-medium text-slate-800">{task.topic}</p><p className="mt-1 font-mono text-xs text-slate-400">{task.id}{task.executionId ? ` · ${task.executionId.slice(0, 8)}` : ""}</p></div>
             <span className={`w-fit rounded-full px-2.5 py-1 text-xs ${task.status === "completed" ? "bg-emerald-50 text-emerald-700" : task.status === "failed" ? "bg-red-50 text-red-700" : task.status === "running" ? "bg-indigo-50 text-indigo-700" : task.status === "paused" ? "bg-slate-100 text-slate-600" : "bg-amber-50 text-amber-700"}`}>{labels[task.status]}</span>
-            <span className="text-slate-600">{task.currentStep} / 5 <small className="ml-1 text-slate-400">{duration(task, now)}</small></span>
+            <span className="text-slate-600">{task.currentStep} / 5 <small className="ml-1 text-slate-400">{duration(task, now)}</small>{task.harnessBudget && <small className="mt-1 block text-slate-400">Harness {task.harnessBudget.usage.steps}/{task.harnessBudget.limits.maxSteps}</small>}</span>
             <span className="text-xs text-slate-500">{new Date(task.updatedAt).toLocaleString("zh-CN")}</span>
             <Link href={`/chat?task=${task.id}`} className="text-xs font-medium text-indigo-700 hover:underline">打开任务</Link>
           </div>

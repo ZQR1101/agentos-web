@@ -41,6 +41,7 @@ async function searchTavily(query: string, maxResults: number): Promise<RawResea
   if (!process.env.TAVILY_API_KEY) throw new Error("服务端尚未配置 Tavily Key。");
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Authorization: `Bearer ${process.env.TAVILY_API_KEY}`,
       "Content-Type": "application/json",
