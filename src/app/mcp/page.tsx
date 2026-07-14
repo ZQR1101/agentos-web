@@ -1,4 +1,5 @@
 import { inspectResearchMcp } from "@/lib/mcp/research-client";
+import { getRuntimeHealth } from "@/lib/runtime-health";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export default async function MCPPage() {
     connectionError = error instanceof Error ? error.message : "MCP 握手失败";
   }
 
-  const remoteEnabled = Boolean(process.env.MCP_ACCESS_TOKEN);
+  const runtime = getRuntimeHealth();
   return (
     <main className="mx-auto max-w-6xl p-6 lg:p-9">
       <p className="text-sm font-medium text-indigo-600">MODEL CONTEXT PROTOCOL</p>
@@ -33,7 +34,8 @@ export default async function MCPPage() {
           </div>
           <div className="text-right text-xs text-slate-500">
             <p>内部：InMemory Transport</p>
-            <p className="mt-1">远程：Streamable HTTP · {remoteEnabled ? "已启用" : "未配置令牌"}</p>
+            <p className="mt-1">远程：Streamable HTTP · {runtime.remoteMcpEnabled ? "已启用" : "未配置令牌"}</p>
+            <p className="mt-1">Host Allowlist：{runtime.allowedMcpHostCount} 个主机</p>
           </div>
         </div>
 

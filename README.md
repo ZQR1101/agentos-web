@@ -10,6 +10,7 @@
 - **真实 MCP 接入**：Research MCP Server 使用官方 TypeScript SDK 暴露 `search_web`；Harness 通过 MCP Client 完成初始化、工具发现和工具调用，并对瞬时空结果执行有限指数退避重试。
 - **真实 Skill Registry**：`research-report` 与 `source-review` 是带版本、输入输出契约、工具声明和可执行方法的能力包；后端与 Skills 页面读取同一份注册表，任务持久化实际 Skill 版本。
 - **默认拒绝的 Tool Policy**：工具页与 Harness 共享注册表；未注册、禁用、作用域不符或缺少明确审批的工具调用都会被拒绝。目前只开放只读 `agentos-research/search_web`。
+- **运行环境健康检查**：工作台只显示 Key 是否配置、当前模型与远程 MCP 是否启用，不暴露任何密钥；缺少 DeepSeek/Tavily 时会在审批前阻止执行。
 - **真实 Harness 预算**：每个外部动作在执行前统一扣减步骤、模型调用和工具调用预算，同时检查总耗时；超限立即失败关闭，不依赖 Prompt 自觉停止。
 - **受控 Agent Loop**：Reviewer 未通过时由 Harness 触发一次修订；默认最多 8 个外部步骤、5 次模型调用、3 次工具调用和 180 秒，避免无限循环与失控消耗。
 - **幂等执行与并发保护**：Harness 通过原子状态转换获取唯一执行权；重复请求复用运行中或已完成的任务，不会重复产生模型与搜索费用。
@@ -114,6 +115,7 @@ npm run test:store
 npm run test:harness
 npm run test:skills
 npm run test:tools
+npm run test:health
 npm run eval:safety
 npm run build
 ```
