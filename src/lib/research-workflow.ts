@@ -4,6 +4,7 @@ import { searchWithResearchMcp } from "@/lib/mcp/research-client";
 import { researchReportSkill } from "@/lib/skills/research-report";
 import { getTask, updateTask } from "@/lib/task-store";
 import { authorizeToolCall, RESEARCH_SEARCH_TOOL_ID } from "@/lib/tool-policy";
+import { analyzeEvidenceCoverage } from "@/lib/source-policy";
 import type { ResearchPlan, ResearchSource, ReviewResult } from "@/types/task";
 
 const model = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
@@ -70,7 +71,9 @@ export async function runResearchWorkflow(taskId: string, executionId: string, d
     events.push(`MCP 搜索完成：共尝试 ${mcpResult.searchAttempts} 次`);
     if (!sources.length) throw new Error(`连续 ${mcpResult.searchAttempts} 次搜索均未找到可用网页来源。`);
     events.push(`Source Policy 完成：保留 ${sources.length} 个来源，安全隔离 ${mcpResult.rejectedCount} 个，去重 ${mcpResult.deduplicatedCount} 个，域名多样性未采用 ${mcpResult.diversityExcludedCount} 个，数量截断 ${mcpResult.truncatedCount} 个`);
-    await updateTask(taskId, { sources, mcp: mcpResult.trace, currentStep: 4, harnessBudget: budget.snapshot(), events });
+    const sourceEvidenceCoverage = analyzeEvidenceCoverage(sources, plan.subquestions);
+    events.push(`证据覆盖评估：${sourceEvidenceCoverage.score}/100 · ${sourceEvidenceCoverage.notes.slice(0, 4).join(" · ")}`);
+    await updateTask(taskId, { sources, evidenceCoverage: sourceEvidenceCoverage, mcp: mcpResult.trace, currentStep: 4, harnessBudget: budget.snapshot(), events });
     let attempts = 1;
     await authorize("model", "Executor 模型调用", 4);
     let written = await dependencies.write(client, model, task.topic, plan, sources);
@@ -84,7 +87,9 @@ export async function runResearchWorkflow(taskId: string, executionId: string, d
     await ensureActive();
     budget.assertWithinDuration("Reviewer 完成");
     events.push(`Reviewer 评分：${review.score}，${review.approved ? "通过" : "需要修订"}`);
-    await updateTask(taskId, { review, attempts, harnessBudget: budget.snapshot(), events });
+    let evidenceCoverage = analyzeEvidenceCoverage(sources, plan.subquestions, review.citationCheck?.citationCount);
+    events.push(`证据引用覆盖结算：${evidenceCoverage.score}/100 · ${evidenceCoverage.notes.at(-2)}`);
+    await updateTask(taskId, { review, evidenceCoverage, attempts, harnessBudget: budget.snapshot(), events });
     if (!review.approved) {
       attempts = 2;
       events.push("Harness 触发一次修订");
@@ -101,12 +106,14 @@ export async function runResearchWorkflow(taskId: string, executionId: string, d
       await ensureActive();
       budget.assertWithinDuration("Reviewer 复核完成");
       events.push(`Reviewer 复核评分：${review.score}，${review.approved ? "通过" : "未通过"}`);
-      await updateTask(taskId, { review, attempts, harnessBudget: budget.snapshot(), events });
+      evidenceCoverage = analyzeEvidenceCoverage(sources, plan.subquestions, review.citationCheck?.citationCount);
+      events.push(`证据引用覆盖复核：${evidenceCoverage.score}/100 · ${evidenceCoverage.notes.at(-2)}`);
+      await updateTask(taskId, { review, evidenceCoverage, attempts, harnessBudget: budget.snapshot(), events });
     }
     if (!review.approved) throw new Error(`Reviewer 未通过：${review.issues.join("；")}`);
     const harnessBudget = budget.snapshot();
     events.push(`Harness 预算结算：${harnessBudget.usage.steps}/${harnessBudget.limits.maxSteps} 步 · ${harnessBudget.usage.modelCalls}/${harnessBudget.limits.maxModelCalls} 次模型 · ${harnessBudget.usage.toolCalls}/${harnessBudget.limits.maxToolCalls} 次工具`);
-    await updateTask(taskId, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, mcp: mcpResult.trace, skill, harnessBudget, attempts, events, model, responseId: written.responseId, completedAt: new Date().toISOString() });
+    await updateTask(taskId, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, evidenceCoverage, mcp: mcpResult.trace, skill, harnessBudget, attempts, events, model, responseId: written.responseId, completedAt: new Date().toISOString() });
   } catch (error) {
     if (error instanceof TaskCancelledError) {
       const current = await getTask(taskId);

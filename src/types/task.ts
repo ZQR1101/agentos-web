@@ -1,6 +1,9 @@
 export type TaskStatus = "waiting_approval" | "paused" | "running" | "completed" | "failed" | "cancelled";
 export type SourceRiskLevel = "low" | "medium" | "high";
-export type ResearchSource = { title: string; url: string; content: string; domain: string; qualityScore: number; riskLevel: SourceRiskLevel; riskReasons: string[] };
+export type SourceType = "government" | "standards" | "research" | "vendor" | "news" | "community" | "other";
+export type SourceCredibility = "high" | "medium" | "low";
+export type SourceFreshness = "current" | "recent" | "aging" | "unknown";
+export type ResearchSource = { title: string; url: string; content: string; domain: string; qualityScore: number; riskLevel: SourceRiskLevel; riskReasons: string[]; sourceType?: SourceType; credibility?: SourceCredibility; freshness?: SourceFreshness; publishedDate?: string; qualityReasons?: string[] };
 export type ResearchPlan = { searchQuery: string; subquestions: string[]; successCriteria: string[] };
 export type CitationCheck = { valid: boolean; issues: string[]; citationCount: number };
 export type ReviewResult = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: CitationCheck };
@@ -9,6 +12,7 @@ export type HarnessLimits = { maxSteps: number; maxModelCalls: number; maxToolCa
 export type HarnessUsage = { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string };
 export type HarnessBudgetSnapshot = { limits: HarnessLimits; usage: HarnessUsage };
 export type SkillCallTrace = { id: string; version: string };
+export type EvidenceCoverage = { method: "source-breadth-heuristic"; score: number; sourceCount: number; targetSourceCount: number; sourceTypeDiversity: number; highCredibilitySourceCount: number; recentSourceCount: number; citedSourceCount?: number; requiredCitedSourceCount?: number; notes: string[] };
 
 export interface ResearchTask {
   id: string;
@@ -24,6 +28,7 @@ export interface ResearchTask {
   mcp?: McpCallTrace;
   harnessBudget?: HarnessBudgetSnapshot;
   skill?: SkillCallTrace;
+  evidenceCoverage?: EvidenceCoverage;
   executionId?: string;
   startedAt?: string;
   completedAt?: string;

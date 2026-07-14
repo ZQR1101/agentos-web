@@ -1,6 +1,6 @@
-import type { ResearchSource, SourceRiskLevel } from "@/types/task";
+import type { EvidenceCoverage, ResearchSource, SourceCredibility, SourceFreshness, SourceRiskLevel, SourceType } from "@/types/task";
 
-export type RawResearchSource = Pick<ResearchSource, "title" | "url" | "content">;
+export type RawResearchSource = Pick<ResearchSource, "title" | "url" | "content"> & { publishedDate?: string };
 
 const injectionSignals = [
   /ignore\s+(all\s+)?previous\s+instructions?/i,
@@ -21,6 +21,11 @@ const authoritativeDomains = [
   "worldbank.org",
 ];
 
+const standardsDomains = ["iso.org", "ieee.org", "w3.org", "ietf.org", "cisa.gov"];
+const researchDomains = ["arxiv.org", "acm.org", "nature.com", "science.org", "springer.com", "openreview.net"];
+const newsDomains = ["reuters.com", "apnews.com", "bbc.com", "nytimes.com", "ft.com", "theverge.com"];
+const communityDomains = ["github.com", "stackoverflow.com", "reddit.com", "medium.com"];
+
 export const MAX_SOURCES_PER_DOMAIN = 2;
 
 function domainMatches(domain: string, candidate: string) {
@@ -34,6 +39,32 @@ function sanitizeContent(content: string) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 1800);
+}
+
+function classifySource(domain: string): SourceType {
+  if (/\.(gov|edu)$/.test(domain)) return "government";
+  if (standardsDomains.some((candidate) => domainMatches(domain, candidate))) return "standards";
+  if (researchDomains.some((candidate) => domainMatches(domain, candidate))) return "research";
+  if (newsDomains.some((candidate) => domainMatches(domain, candidate))) return "news";
+  if (communityDomains.some((candidate) => domainMatches(domain, candidate))) return "community";
+  if (authoritativeDomains.some((candidate) => domainMatches(domain, candidate))) return "government";
+  if (/\b(aws|azure|cloud|openai|anthropic|microsoft|google|ibm|oracle|salesforce)\b/.test(domain)) return "vendor";
+  return "other";
+}
+
+function parsePublishedDate(source: RawResearchSource) {
+  const candidate = source.publishedDate ?? `${source.url} ${source.content}`.match(/\b(20\d{2})[-\/.](0?[1-9]|1[0-2])[-\/.]([0-2]?\d|3[01])\b/)?.[0];
+  if (!candidate) return undefined;
+  const parsed = new Date(candidate);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString().slice(0, 10);
+}
+
+function assessFreshness(publishedDate: string | undefined): SourceFreshness {
+  if (!publishedDate) return "unknown";
+  const ageDays = Math.floor((Date.now() - new Date(publishedDate).getTime()) / 86_400_000);
+  if (ageDays < 0 || ageDays <= 180) return "current";
+  if (ageDays <= 730) return "recent";
+  return "aging";
 }
 
 function assessSource(source: RawResearchSource): ResearchSource | null {
@@ -51,14 +82,25 @@ function assessSource(source: RawResearchSource): ResearchSource | null {
     .filter((pattern) => pattern.test(content))
     .map((_, index) => `命中提示注入特征 ${index + 1}`);
   const riskLevel: SourceRiskLevel = riskReasons.length >= 2 ? "high" : riskReasons.length === 1 ? "medium" : "low";
+  const sourceType = classifySource(domain);
+  const publishedDate = parsePublishedDate(source);
+  const freshness = assessFreshness(publishedDate);
+  const qualityReasons: string[] = [];
 
   let qualityScore = 50;
-  if (parsed.protocol === "https:") qualityScore += 10;
-  if (/\.(gov|edu)$/.test(domain)) qualityScore += 15;
-  if (authoritativeDomains.some((candidate) => domainMatches(domain, candidate))) qualityScore += 15;
-  if (content.length >= 300) qualityScore += 10;
-  if (content.length >= 900) qualityScore += 5;
+  if (parsed.protocol === "https:") { qualityScore += 10; qualityReasons.push("HTTPS 传输"); }
+  if (/\.(gov|edu)$/.test(domain)) { qualityScore += 15; qualityReasons.push("政府或教育域名"); }
+  if (authoritativeDomains.some((candidate) => domainMatches(domain, candidate))) { qualityScore += 15; qualityReasons.push("权威机构域名"); }
+  if (sourceType === "standards" || sourceType === "research") { qualityScore += 10; qualityReasons.push(`${sourceType === "standards" ? "标准组织" : "研究出版物"}来源`); }
+  if (content.length >= 300) { qualityScore += 10; qualityReasons.push("摘要信息充足"); }
+  if (content.length >= 900) { qualityScore += 5; qualityReasons.push("摘要信息详细"); }
+  if (freshness === "current") { qualityScore += 5; qualityReasons.push("发布时间在 180 天内"); }
+  if (freshness === "aging") { qualityScore -= 5; qualityReasons.push("发布时间超过两年"); }
   qualityScore -= riskReasons.length * 25;
+  if (riskReasons.length) qualityReasons.push(...riskReasons);
+  const credibility: SourceCredibility = sourceType === "government" || sourceType === "standards" || sourceType === "research"
+    ? "high"
+    : sourceType === "vendor" || sourceType === "news" || sourceType === "community" ? "medium" : "low";
 
   return {
     title: sanitizeContent(source.title).slice(0, 240),
@@ -68,7 +110,34 @@ function assessSource(source: RawResearchSource): ResearchSource | null {
     qualityScore: Math.max(0, Math.min(100, qualityScore)),
     riskLevel,
     riskReasons,
+    sourceType,
+    credibility,
+    freshness,
+    publishedDate,
+    qualityReasons,
   };
+}
+
+export function analyzeEvidenceCoverage(sources: ResearchSource[], subquestions: string[], citedSourceCount?: number): EvidenceCoverage {
+  const targetSourceCount = Math.max(1, Math.min(3, subquestions.length || 3));
+  const highCredibilitySourceCount = sources.filter((source) => source.credibility === "high").length;
+  const recentSourceCount = sources.filter((source) => source.freshness === "current" || source.freshness === "recent").length;
+  const sourceTypeDiversity = new Set(sources.map((source) => source.sourceType ?? "other")).size;
+  const breadth = Math.min(1, sources.length / targetSourceCount);
+  const credibility = Math.min(1, highCredibilitySourceCount / Math.min(2, targetSourceCount));
+  const diversity = Math.min(1, sourceTypeDiversity / Math.min(3, targetSourceCount));
+  const freshness = sources.length ? recentSourceCount / sources.length : 0;
+  const citation = citedSourceCount === undefined ? 1 : Math.min(1, citedSourceCount / Math.min(2, sources.length));
+  const score = Math.round((breadth * 35 + credibility * 25 + diversity * 20 + freshness * 10 + citation * 10));
+  const notes = [
+    `来源广度 ${sources.length}/${targetSourceCount}`,
+    `高可信来源 ${highCredibilitySourceCount}`,
+    `来源类型 ${sourceTypeDiversity} 类`,
+    `可判定近期来源 ${recentSourceCount}`,
+    citedSourceCount === undefined ? "引用覆盖将在报告生成后结算" : `有效引用来源 ${citedSourceCount}/${Math.min(2, sources.length)}`,
+    "该分数衡量来源组合的广度与元数据，不替代逐句事实核验。",
+  ];
+  return { method: "source-breadth-heuristic", score, sourceCount: sources.length, targetSourceCount, sourceTypeDiversity, highCredibilitySourceCount, recentSourceCount, citedSourceCount, requiredCitedSourceCount: citedSourceCount === undefined ? undefined : Math.min(2, sources.length), notes };
 }
 
 export function screenSources(rawSources: RawResearchSource[], limit = 6) {
