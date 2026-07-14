@@ -95,9 +95,21 @@ export async function POST(request: Request) {
     let attempts = 1;
     let written = await runWriter(client, task.topic, plan, sources);
     events.push("Executor 完成第一版报告");
+    await updateTask(task.id, { currentStep: 5, events });
     let review = await runReviewer(client, task.topic, plan, written.report, sources);
     events.push(`Reviewer 评分：${review.score}，${review.approved ? "通过" : "需要修订"}`);
-    if (!review.approved) { attempts = 2; written = await runWriter(client, task.topic, plan, sources, review.revisionInstructions); events.push("Harness 触发一次修订"); review = await runReviewer(client, task.topic, plan, written.report, sources); events.push(`Reviewer 复核评分：${review.score}，${review.approved ? "通过" : "未通过"}`); }
+    await updateTask(task.id, { review, attempts, events });
+    if (!review.approved) {
+      attempts = 2;
+      events.push("Harness 触发一次修订");
+      await updateTask(task.id, { attempts, events });
+      written = await runWriter(client, task.topic, plan, sources, review.revisionInstructions);
+      events.push("Executor 完成修订版报告");
+      await updateTask(task.id, { events });
+      review = await runReviewer(client, task.topic, plan, written.report, sources);
+      events.push(`Reviewer 复核评分：${review.score}，${review.approved ? "通过" : "未通过"}`);
+      await updateTask(task.id, { review, attempts, events });
+    }
     if (!review.approved) throw new Error(`Reviewer 未通过：${review.issues.join("；")}`);
     const completed = await updateTask(task.id, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, mcp: mcpResult.trace, attempts, events, model, responseId: written.responseId, completedAt: new Date().toISOString() });
     if (!completed) throw new Error("任务在完成持久化时丢失。");

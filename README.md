@@ -16,6 +16,7 @@
 - **双层质量门禁**：Reviewer 负责语义质量，Harness 程序化核对引用编号、原始 URL 和未授权外链，任一检查失败都会触发修订或终止。
 - **任务持久化**：Task、Plan、Sources、Report、Review 和 Events 保存至 `.data/tasks.json`，刷新后仍可恢复。
 - **可观测性**：记录 Agent 交接、当前步骤、Reviewer 分数、执行轮数、失败原因和模型响应 ID。
+- **实时运行快照**：工作台每 1.5 秒同步持久化状态，展示当前 Agent、MCP 调用、Reviewer 修订、执行 ID 与耗时；运行记录页每 3 秒自动刷新。
 
 ## 架构
 
@@ -107,7 +108,7 @@ npm run build
 ## 当前边界
 
 - JSON Task Store 使用进程内写锁与临时文件原子替换，能够处理单进程并发；它仍不适合多实例或 Serverless 生产部署。
-- 执行 API 当前为同步请求；生产版本应使用任务队列、轮询/SSE 和可取消的后台 Worker。
+- UI 已通过轮询展示持久化进度，但执行 API 仍是同步请求；生产版本应使用任务队列、SSE 和可取消的后台 Worker。
 - 当前 Source Policy 是启发式规则，生产版本还应增加域名信誉库、发布时间校验、内容抓取验证和专门的安全评测集。
 - 远程 MCP 默认关闭；只有同时配置访问令牌和 Host Allowlist 才能开放，避免公开消耗 Tavily 配额。
 
