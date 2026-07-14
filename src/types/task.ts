@@ -8,6 +8,7 @@ export type McpCallTrace = { serverName: string; serverVersion: string; toolName
 export type HarnessLimits = { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number };
 export type HarnessUsage = { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string };
 export type HarnessBudgetSnapshot = { limits: HarnessLimits; usage: HarnessUsage };
+export type SkillCallTrace = { id: string; version: string };
 
 export interface ResearchTask {
   id: string;
@@ -22,6 +23,7 @@ export interface ResearchTask {
   review?: ReviewResult;
   mcp?: McpCallTrace;
   harnessBudget?: HarnessBudgetSnapshot;
+  skill?: SkillCallTrace;
   executionId?: string;
   startedAt?: string;
   completedAt?: string;

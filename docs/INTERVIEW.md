@@ -19,6 +19,10 @@
 
 Planner 输出 `ResearchPlan`；Executor 接收计划和搜索来源并输出 Markdown；Reviewer 输出 `ReviewResult`。角色之间通过 TypeScript 数据结构交接，而不是自由对话。
 
+### Skill 是真实执行模块还是页面概念？
+
+是真实模块。`research-report@1.0.0` 封装 Planner、Executor、Reviewer 的提示词与执行方法，并用 Zod 校验 Planner/Reviewer 输出；`source-review@1.0.0` 封装确定性的来源筛选和引用验证。两者注册到同一个 Skill Registry，Skills 页面直接读取注册表，Task 还会保存本次实际使用的 Skill ID 与版本，便于复现和升级审计。
+
 ### 如何防止无限循环？
 
 不是只在 Prompt 里要求模型停止。Harness 在每次外部动作前通过确定性预算执行器授权，默认最多 8 步、5 次模型调用、3 次工具调用和 180 秒；任一维度超限都会失败关闭并持久化用量。修订次数另行限制为一次，Reviewer 第二次仍不通过时任务进入失败状态并保存原因。

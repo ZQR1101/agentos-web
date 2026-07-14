@@ -43,6 +43,9 @@ jobs:
       - name: Harness budget test
         run: npm run test:harness
 
+      - name: Skill contract test
+        run: npm run test:skills
+
       - name: Source Policy safety evaluation
         run: npm run eval:safety
 

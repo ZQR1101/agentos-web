@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { screenSources, type RawResearchSource } from "@/lib/source-policy";
+import { type RawResearchSource } from "@/lib/source-policy";
+import { sourceReviewSkill } from "@/lib/skills/source-review";
 
 export const RESEARCH_MCP_SERVER = {
   name: "agentos-research",
@@ -93,7 +94,7 @@ export function createResearchMcpServer(
         let rejectedCount = 0;
         for (let searchAttempts = 1; searchAttempts <= maxAttempts; searchAttempts += 1) {
           const rawSources = await searchProvider(query, maxResults);
-          const screened = screenSources(rawSources, maxResults);
+          const screened = sourceReviewSkill.reviewSources(rawSources, maxResults);
           rejectedCount += screened.rejectedCount;
           const output = { sources: screened.sources, rejectedCount, searchAttempts };
           if (output.sources.length > 0 || searchAttempts === maxAttempts) {
