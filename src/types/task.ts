@@ -18,6 +18,9 @@ export interface ResearchTask {
   plan?: ResearchPlan;
   review?: ReviewResult;
   mcp?: McpCallTrace;
+  executionId?: string;
+  startedAt?: string;
+  completedAt?: string;
   attempts?: number;
   events?: string[];
   error?: string;
