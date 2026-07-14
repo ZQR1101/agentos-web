@@ -1,10 +1,16 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createResearchMcpServer, RESEARCH_MCP_SERVER, searchResultSchema, type SearchProvider } from "@/lib/mcp/research-server";
+import {
+  createResearchMcpServer,
+  RESEARCH_MCP_SERVER,
+  searchResultSchema,
+  type SearchProvider,
+  type SearchRetryOptions,
+} from "@/lib/mcp/research-server";
 import type { McpCallTrace } from "@/types/task";
 
-async function connectResearchMcp(searchProvider?: SearchProvider) {
-  const server = createResearchMcpServer(searchProvider);
+async function connectResearchMcp(searchProvider?: SearchProvider, retryOptions?: SearchRetryOptions) {
+  const server = createResearchMcpServer(searchProvider, retryOptions);
   const client = new Client({ name: "agentos-harness", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -31,8 +37,13 @@ export async function inspectResearchMcp() {
   }
 }
 
-export async function searchWithResearchMcp(query: string, maxResults = 6, searchProvider?: SearchProvider) {
-  const connection = await connectResearchMcp(searchProvider);
+export async function searchWithResearchMcp(
+  query: string,
+  maxResults = 6,
+  searchProvider?: SearchProvider,
+  retryOptions?: SearchRetryOptions,
+) {
+  const connection = await connectResearchMcp(searchProvider, retryOptions);
   try {
     const discovered = await connection.client.listTools();
     const tool = discovered.tools.find((candidate) => candidate.name === RESEARCH_MCP_SERVER.toolName);

@@ -7,7 +7,7 @@
 ## 项目亮点
 
 - **真实 Multi-Agent**：Planner 输出结构化 JSON 计划；Executor 调用 Tavily 检索并基于来源写报告；Reviewer 独立评分和提出修订要求。
-- **真实 MCP 接入**：Research MCP Server 使用官方 TypeScript SDK 暴露 `search_web`；Harness 通过 MCP Client 完成初始化、工具发现和工具调用，而不是直接调用搜索函数。
+- **真实 MCP 接入**：Research MCP Server 使用官方 TypeScript SDK 暴露 `search_web`；Harness 通过 MCP Client 完成初始化、工具发现和工具调用，并对瞬时空结果执行有限指数退避重试。
 - **受控 Agent Loop**：Reviewer 未通过时由 Harness 触发一次修订，达到上限后终止，避免无限循环。
 - **幂等执行与并发保护**：Harness 通过原子状态转换获取唯一执行权；重复请求复用运行中或已完成的任务，不会重复产生模型与搜索费用。
 - **Human-in-the-loop**：外部搜索和模型调用前必须获得用户批准，任务可在审批节点暂停和恢复。
@@ -46,7 +46,7 @@ flowchart LR
 3. Harness 原子地将 Task 从待审批切换为执行中并写入 `executionId`；并发请求只能复用已有执行。
 4. Planner 将目标转换为 `searchQuery`、`subquestions` 和 `successCriteria`。
 5. Harness 与 Research MCP Server 建立连接，执行 `tools/list` 发现 `search_web`，再通过 `tools/call` 发起搜索。
-6. MCP Tool 调用 Tavily 获取候选来源；Source Policy 校验 URL、清洗摘要、检测提示注入并按质量排序，最多保留 6 个来源。
+6. MCP Tool 调用 Tavily 获取候选来源；瞬时空结果最多重试 3 次，并记录实际尝试次数；Source Policy 校验 URL、清洗摘要、检测提示注入并按质量排序，最多保留 6 个来源。
 7. Executor 将来源作为不可信数据隔离后交给 DeepSeek，生成带引用的 Markdown 报告。
 8. Harness 先程序化校验引用编号、URL 和外链白名单，再由 Reviewer 返回结构化审核结果。
 9. 任一质量门禁未通过时最多修订一次；通过后保存报告、执行 ID、MCP 调用轨迹、来源评分和完整事件记录。

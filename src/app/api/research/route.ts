@@ -88,8 +88,9 @@ export async function POST(request: Request) {
     await updateTask(task.id, { plan, currentStep: 3, events });
     const mcpResult = await searchWithResearchMcp(plan.searchQuery);
     const sources = mcpResult.sources;
-    if (!sources.length) throw new Error("没有找到可用网页来源。");
     events.push(`MCP Client 发现并调用 ${mcpResult.trace.serverName}/${mcpResult.trace.toolName}`);
+    events.push(`MCP 搜索完成：共尝试 ${mcpResult.searchAttempts} 次`);
+    if (!sources.length) throw new Error(`连续 ${mcpResult.searchAttempts} 次搜索均未找到可用网页来源。`);
     events.push(`Source Policy 完成：保留 ${sources.length} 个来源，隔离 ${mcpResult.rejectedCount} 个`);
     await updateTask(task.id, { sources, mcp: mcpResult.trace, currentStep: 4, events });
     let attempts = 1;
