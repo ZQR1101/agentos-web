@@ -35,6 +35,9 @@ const sourceSchema = z.object({
 export const searchResultSchema = z.object({
   sources: z.array(sourceSchema),
   rejectedCount: z.number().int().nonnegative(),
+  deduplicatedCount: z.number().int().nonnegative(),
+  diversityExcludedCount: z.number().int().nonnegative(),
+  truncatedCount: z.number().int().nonnegative(),
   searchAttempts: z.number().int().positive(),
 });
 
@@ -92,11 +95,17 @@ export function createResearchMcpServer(
     async ({ query, maxResults }) => {
       try {
         let rejectedCount = 0;
+        let deduplicatedCount = 0;
+        let diversityExcludedCount = 0;
+        let truncatedCount = 0;
         for (let searchAttempts = 1; searchAttempts <= maxAttempts; searchAttempts += 1) {
           const rawSources = await searchProvider(query, maxResults);
           const screened = sourceReviewSkill.reviewSources(rawSources, maxResults);
           rejectedCount += screened.rejectedCount;
-          const output = { sources: screened.sources, rejectedCount, searchAttempts };
+          deduplicatedCount += screened.deduplicatedCount;
+          diversityExcludedCount += screened.diversityExcludedCount;
+          truncatedCount += screened.truncatedCount;
+          const output = { sources: screened.sources, rejectedCount, deduplicatedCount, diversityExcludedCount, truncatedCount, searchAttempts };
           if (output.sources.length > 0 || searchAttempts === maxAttempts) {
             return {
               content: [{ type: "text" as const, text: JSON.stringify(output) }],
