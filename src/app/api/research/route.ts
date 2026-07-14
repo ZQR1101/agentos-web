@@ -89,6 +89,7 @@ export async function POST(request: Request) {
     let written = await researchReportSkill.write(client, model, task.topic, plan, sources);
     budget.assertWithinDuration("Executor 完成");
     events.push("Executor 完成第一版报告");
+    if (written.rewrittenCitationCount || written.removedExternalLinkCount) events.push(`Citation Renderer：规范 ${written.rewrittenCitationCount} 个旧式引用，移除 ${written.removedExternalLinkCount} 个非白名单外链`);
     await updateTask(task.id, { currentStep: 5, harnessBudget: budget.snapshot(), events });
     await authorize("model", "Reviewer 模型调用", 5);
     let review = await researchReportSkill.review(client, model, task.topic, plan, written.report, sources);
@@ -103,6 +104,7 @@ export async function POST(request: Request) {
       written = await researchReportSkill.write(client, model, task.topic, plan, sources, review.revisionInstructions);
       budget.assertWithinDuration("Executor 修订完成");
       events.push("Executor 完成修订版报告");
+      if (written.rewrittenCitationCount || written.removedExternalLinkCount) events.push(`Citation Renderer：规范 ${written.rewrittenCitationCount} 个旧式引用，移除 ${written.removedExternalLinkCount} 个非白名单外链`);
       await updateTask(task.id, { harnessBudget: budget.snapshot(), events });
       await authorize("model", "Reviewer 复核调用", 5);
       review = await researchReportSkill.review(client, model, task.topic, plan, written.report, sources);
