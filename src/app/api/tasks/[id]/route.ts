@@ -31,6 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           mcp: undefined,
           harnessBudget: undefined,
           evidenceCoverage: undefined,
+          observability: undefined,
           skill: undefined,
           model: undefined,
           responseId: undefined,

@@ -22,6 +22,7 @@
 - **安全评测门禁**：CI 运行 10 个来源策略样本和 5 个引用完整性用例；当前回归集的高风险拒绝召回率与可用来源保留率均为 100%。
 - **可切换持久化与队列**：默认使用 JSON Task Store + 进程内 Worker；配置 `DATABASE_URL` 与 `REDIS_URL` 后切换为 PostgreSQL 事务存储 + BullMQ 独立 Worker。
 - **可观测性**：记录 Agent 交接、当前步骤、Reviewer 分数、执行轮数、失败原因和模型响应 ID。
+- **Token、延迟与成本估算**：逐次记录 Planner / Executor / Reviewer 的耗时、Token、响应 ID；仅在配置每百万 Token 单价后展示估算成本，不把估算当作平台账单。
 - **后台 Worker + SSE**：审批后 API 立即返回，单进程 Worker 在后台执行；工作台通过 SSE 接收持久化快照，并支持协作式取消后续步骤。
 
 ## 架构
@@ -80,6 +81,9 @@ npm run dev
 ```env
 DEEPSEEK_API_KEY=你的密钥
 DEEPSEEK_MODEL=deepseek-v4-flash
+# 可选：用于任务成本估算；不填时仍记录 Token 和延迟，但不显示成本。
+DEEPSEEK_INPUT_PRICE_PER_1M_USD=输入每百万 Token 的美元单价
+DEEPSEEK_OUTPUT_PRICE_PER_1M_USD=输出每百万 Token 的美元单价
 TAVILY_API_KEY=你的密钥
 # 可选：启用带认证的远程 MCP Endpoint
 MCP_ACCESS_TOKEN=一段足够长的随机值
@@ -140,6 +144,7 @@ npm run test:workflow
 npm run test:events
 npm run test:e2e
 npm run test:queue
+npm run test:observability
 npm run eval:safety
 npm run build
 ```

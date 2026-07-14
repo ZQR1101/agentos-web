@@ -67,6 +67,9 @@ jobs:
       - name: Queue mode test
         run: npm run test:queue
 
+      - name: Model observability test
+        run: npm run test:observability
+
       - name: Source Policy safety evaluation
         run: npm run eval:safety
 

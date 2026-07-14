@@ -10,6 +10,7 @@ type Source = { title: string; url: string; content: string; domain?: string; qu
 type Review = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: { valid: boolean; issues: string[]; citationCount: number } };
 type HarnessBudget = { limits: { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number }; usage: { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string } };
 type EvidenceCoverage = { score: number; sourceCount: number; targetSourceCount: number; sourceTypeDiversity: number; highCredibilitySourceCount: number; recentSourceCount: number; citedSourceCount?: number; notes: string[] };
+type TaskObservability = { totalDurationMs: number; totalTokens: number; estimatedCostUsd?: number; modelCalls: Array<{ agent: string; latencyMs: number; totalTokens?: number; estimatedCostUsd?: number }> };
 type RuntimeHealth = { ready: boolean; model: string; deepSeekConfigured: boolean; tavilyConfigured: boolean; remoteMcpEnabled: boolean; allowedMcpHostCount: number; taskStoreMode: "json" | "postgres"; queueMode: "in-memory" | "redis" };
 type Stage = "idle" | "approval" | "paused" | "running" | "done" | "failed" | "cancelled";
 type SavedTask = {
@@ -28,6 +29,7 @@ type SavedTask = {
   completedAt?: string;
   harnessBudget?: HarnessBudget;
   evidenceCoverage?: EvidenceCoverage;
+  observability?: TaskObservability;
 };
 type ResearchPayload = { task?: SavedTask; error?: string; message?: string };
 
@@ -102,6 +104,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
   const [completedAt, setCompletedAt] = useState("");
   const [harnessBudget, setHarnessBudget] = useState<HarnessBudget | null>(null);
   const [evidenceCoverage, setEvidenceCoverage] = useState<EvidenceCoverage | null>(null);
+  const [observability, setObservability] = useState<TaskObservability | null>(null);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth | null>(null);
   const [now, setNow] = useState(0);
 
@@ -117,6 +120,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
     setCompletedAt(saved.completedAt ?? "");
     setHarnessBudget(saved.harnessBudget ?? null);
     setEvidenceCoverage(saved.evidenceCoverage ?? null);
+    setObservability(saved.observability ?? null);
     setStage(stageFromStatus(saved.status));
     setSteps(buildSteps(saved));
     setEvents(loaded ? [...(saved.events ?? []), `已从持久化记录加载：${saved.id}`] : (saved.events ?? []));
@@ -234,6 +238,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
 
       <aside className="space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4 flex justify-between"><h2 className="font-medium">执行工作流</h2><span className="text-xs text-slate-400">5 steps</span></div><div className="space-y-3">{steps.map((step, index) => <div key={step.title} className={`rounded-xl border p-3 ${colors[step.state]}`}><div className="flex justify-between gap-2 text-sm font-medium"><span>{index + 1}. {step.title}</span><span className="text-[11px]">{step.kind}</span></div><p className="mt-1 text-xs opacity-80">{step.detail}</p></div>)}</div></section>
+        {observability && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-medium">模型可观测性</h2><span className="text-xs text-slate-400">live</span></div><div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]"><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">调用 {observability.modelCalls.length}</span><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">Token {observability.totalTokens || "--"}</span><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">估算 {observability.estimatedCostUsd === undefined ? "未配置单价" : `$${observability.estimatedCostUsd.toFixed(4)}`}</span></div><p className="mt-2 text-xs text-slate-500">总耗时 {(observability.totalDurationMs / 1000).toFixed(1)}s；成本仅使用服务端配置的每百万 Token 单价估算。</p><div className="mt-3 space-y-2">{observability.modelCalls.map((call, index) => <div key={`${call.agent}-${index}`} className="flex justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"><span>{call.agent}</span><span>{call.latencyMs}ms · {call.totalTokens ?? "Token 未返回"}{call.estimatedCostUsd === undefined ? "" : ` · $${call.estimatedCostUsd.toFixed(4)}`}</span></div>)}</div></section>}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-medium">Harness 事件</h2><span className="text-xs text-slate-400">live</span></div>{harnessBudget && <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]"><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">步骤 {harnessBudget.usage.steps}/{harnessBudget.limits.maxSteps}</span><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">模型 {harnessBudget.usage.modelCalls}/{harnessBudget.limits.maxModelCalls}</span><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">工具 {harnessBudget.usage.toolCalls}/{harnessBudget.limits.maxToolCalls}</span></div>}<ol className="mt-3 space-y-3 border-l border-slate-200 pl-4">{events.map((event, index) => <li key={`${event}-${index}`} className="text-xs leading-5 text-slate-600">{event}</li>)}</ol></section>
       </aside>
     </div>

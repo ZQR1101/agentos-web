@@ -20,6 +20,7 @@
     "test:events": "tsx --test tests/task-events.test.ts",
     "test:e2e": "tsx --test tests/workflow-e2e.test.ts",
     "test:queue": "tsx --test tests/queue-mode.test.ts",
+    "test:observability": "tsx --test tests/model-observability.test.ts",
     "eval:safety": "tsx evals/source-policy.eval.ts"
   },
   "dependencies": {

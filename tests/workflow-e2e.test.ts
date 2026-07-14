@@ -15,7 +15,7 @@ const source = { title: "NIST guidance", url: "https://nist.gov/ai", content: "T
 
 const dependencies: ResearchWorkflowDependencies = {
   createClient: () => ({}) as OpenAI,
-  plan: async () => ({ searchQuery: "agent governance", subquestions: ["question one", "question two", "question three"], successCriteria: ["criterion one", "criterion two", "criterion three"] }),
+  plan: async () => ({ plan: { searchQuery: "agent governance", subquestions: ["question one", "question two", "question three"], successCriteria: ["criterion one", "criterion two", "criterion three"] } }),
   search: async () => ({ sources: [source], rejectedCount: 0, deduplicatedCount: 0, diversityExcludedCount: 0, truncatedCount: 0, searchAttempts: 1, trace: { serverName: "agentos-research", serverVersion: "1.0.0", toolName: "search_web", transport: "in-memory" as const, discoveredTools: ["search_web"] } }),
   write: async () => ({ report: `[来源 1](${source.url})`, responseId: "fake-e2e-response", rewrittenCitationCount: 0, removedExternalLinkCount: 0 }),
   review: async () => ({ approved: true, score: 92, issues: [], revisionInstructions: "", citationCheck: { valid: true, issues: [], citationCount: 1 } }),
