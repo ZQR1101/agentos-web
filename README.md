@@ -1,5 +1,7 @@
 # AgentOS
 
+[![CI](https://github.com/ZQR1101/agentos-web/actions/workflows/ci.yml/badge.svg)](https://github.com/ZQR1101/agentos-web/actions/workflows/ci.yml)
+
 一个面向 Agent 开发实习作品集的可控调研 Agent。它不是普通聊天页面，而是一个包含真实多 Agent 协作、网页检索、人工审批、任务持久化和执行追踪的 Agent Runtime 原型。
 
 ## 项目亮点
