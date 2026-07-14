@@ -30,6 +30,11 @@ const sourceSchema = z.object({
   qualityScore: z.number().min(0).max(100),
   riskLevel: z.enum(["low", "medium", "high"]),
   riskReasons: z.array(z.string()),
+  sourceType: z.enum(["government", "standards", "research", "vendor", "news", "community", "other"]).optional(),
+  credibility: z.enum(["high", "medium", "low"]).optional(),
+  freshness: z.enum(["current", "recent", "aging", "unknown"]).optional(),
+  publishedDate: z.string().optional(),
+  qualityReasons: z.array(z.string()).optional(),
 });
 
 export const searchResultSchema = z.object({
@@ -58,8 +63,8 @@ async function searchTavily(query: string, maxResults: number): Promise<RawResea
     }),
   });
   if (!response.ok) throw new Error(`Tavily 搜索失败（HTTP ${response.status}）。`);
-  const payload = await response.json() as { results?: RawResearchSource[] };
-  return (payload.results ?? []).filter((source) => source.title && source.url && source.content);
+  const payload = await response.json() as { results?: Array<RawResearchSource & { published_date?: string }> };
+  return (payload.results ?? []).filter((source) => source.title && source.url && source.content).map((source) => ({ ...source, publishedDate: source.publishedDate ?? source.published_date }));
 }
 
 export function createResearchMcpServer(

@@ -6,9 +6,10 @@ import remarkGfm from "remark-gfm";
 
 type StepState = "done" | "active" | "waiting" | "queued" | "failed";
 type Step = { title: string; detail: string; state: StepState; kind: string };
-type Source = { title: string; url: string; content: string; domain?: string; qualityScore?: number; riskLevel?: "low" | "medium" | "high"; riskReasons?: string[] };
+type Source = { title: string; url: string; content: string; domain?: string; qualityScore?: number; riskLevel?: "low" | "medium" | "high"; riskReasons?: string[]; sourceType?: string; credibility?: "high" | "medium" | "low"; freshness?: "current" | "recent" | "aging" | "unknown"; publishedDate?: string; qualityReasons?: string[] };
 type Review = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: { valid: boolean; issues: string[]; citationCount: number } };
 type HarnessBudget = { limits: { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number }; usage: { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string } };
+type EvidenceCoverage = { score: number; sourceCount: number; targetSourceCount: number; sourceTypeDiversity: number; highCredibilitySourceCount: number; recentSourceCount: number; citedSourceCount?: number; notes: string[] };
 type RuntimeHealth = { ready: boolean; model: string; deepSeekConfigured: boolean; tavilyConfigured: boolean; remoteMcpEnabled: boolean; allowedMcpHostCount: number; taskStoreMode: "json" | "postgres"; queueMode: "in-memory" | "redis" };
 type Stage = "idle" | "approval" | "paused" | "running" | "done" | "failed" | "cancelled";
 type SavedTask = {
@@ -26,6 +27,7 @@ type SavedTask = {
   startedAt?: string;
   completedAt?: string;
   harnessBudget?: HarnessBudget;
+  evidenceCoverage?: EvidenceCoverage;
 };
 type ResearchPayload = { task?: SavedTask; error?: string; message?: string };
 
@@ -99,6 +101,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
   const [startedAt, setStartedAt] = useState("");
   const [completedAt, setCompletedAt] = useState("");
   const [harnessBudget, setHarnessBudget] = useState<HarnessBudget | null>(null);
+  const [evidenceCoverage, setEvidenceCoverage] = useState<EvidenceCoverage | null>(null);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth | null>(null);
   const [now, setNow] = useState(0);
 
@@ -113,6 +116,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
     setStartedAt(saved.startedAt ?? "");
     setCompletedAt(saved.completedAt ?? "");
     setHarnessBudget(saved.harnessBudget ?? null);
+    setEvidenceCoverage(saved.evidenceCoverage ?? null);
     setStage(stageFromStatus(saved.status));
     setSteps(buildSteps(saved));
     setEvents(loaded ? [...(saved.events ?? []), `已从持久化记录加载：${saved.id}`] : (saved.events ?? []));
@@ -222,7 +226,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
           {error && <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error}</div>}
           {review && <div className={`flex items-center justify-between rounded-xl border p-4 text-sm ${review.approved ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}><span>Reviewer {review.approved ? "已通过" : "要求修订"} · {attempts} 轮执行{review.citationCheck ? ` · ${review.citationCheck.citationCount} 个有效引用` : ""}</span><strong className="text-lg">{review.score}/100</strong></div>}
 
-          {report && <><article className="report-markdown rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: (props) => <a {...props} target="_blank" rel="noreferrer" /> }}>{report}</ReactMarkdown></article><section className="rounded-xl border border-slate-200 p-5"><div className="flex items-center justify-between"><h2 className="font-medium">检索来源</h2><span className="text-xs text-slate-400">已通过 Source Policy</span></div><div className="mt-3 space-y-2">{sources.map((source, index) => <details key={source.url} className="rounded-lg border border-slate-200 px-3 py-2"><summary className="cursor-pointer text-sm font-medium text-indigo-700">[{index + 1}] {source.title}</summary><div className="mt-2 flex flex-wrap gap-2 text-[11px]"><span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{source.domain ?? new URL(source.url).hostname}</span>{source.qualityScore !== undefined && <span className="rounded bg-indigo-50 px-2 py-1 text-indigo-700">质量 {source.qualityScore}/100</span>}<span className={`rounded px-2 py-1 ${source.riskLevel === "medium" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{source.riskLevel === "medium" ? "需谨慎" : "低风险"}</span></div><p className="mt-2 text-xs leading-5 text-slate-500">{source.content}</p><a className="mt-2 inline-block text-xs text-indigo-700 hover:underline" href={source.url} target="_blank" rel="noreferrer">打开原始网页 ↗</a></details>)}</div></section></>}
+          {report && <><article className="report-markdown rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: (props) => <a {...props} target="_blank" rel="noreferrer" /> }}>{report}</ReactMarkdown></article>{evidenceCoverage && <section className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4"><div className="flex items-center justify-between"><h2 className="text-sm font-medium text-indigo-950">证据覆盖度</h2><strong className="text-lg text-indigo-700">{evidenceCoverage.score}/100</strong></div><p className="mt-1 text-xs text-indigo-700">来源 {evidenceCoverage.sourceCount}/{evidenceCoverage.targetSourceCount} · 类型 {evidenceCoverage.sourceTypeDiversity} 类 · 高可信 {evidenceCoverage.highCredibilitySourceCount} · 近期 {evidenceCoverage.recentSourceCount}{evidenceCoverage.citedSourceCount !== undefined ? ` · 有效引用 ${evidenceCoverage.citedSourceCount}` : ""}</p><p className="mt-2 text-[11px] leading-5 text-slate-500">{evidenceCoverage.notes.at(-1)}</p></section>}<section className="rounded-xl border border-slate-200 p-5"><div className="flex items-center justify-between"><h2 className="font-medium">检索来源</h2><span className="text-xs text-slate-400">已通过 Source Policy</span></div><div className="mt-3 space-y-2">{sources.map((source, index) => <details key={source.url} className="rounded-lg border border-slate-200 px-3 py-2"><summary className="cursor-pointer text-sm font-medium text-indigo-700">[{index +1}] {source.title}</summary><div className="mt-2 flex flex-wrap gap-2 text-[11px]"><span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{source.domain ?? new URL(source.url).hostname}</span>{source.qualityScore !== undefined && <span className="rounded bg-indigo-50 px-2 py-1 text-indigo-700">质量 {source.qualityScore}/100</span>}<span className="rounded bg-violet-50 px-2 py-1 text-violet-700">{source.sourceType ?? "其他"}</span><span className={`rounded px-2 py-1 ${source.credibility === "high" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>可信度 {source.credibility === "high" ? "高" : source.credibility === "medium" ? "中" : "待核"}</span><span className="rounded bg-slate-100 px-2 py-1 text-slate-600">时效 {source.freshness === "current" ? "近期" : source.freshness === "recent" ? "近两年" : source.freshness === "aging" ? "较早" : "未提供"}</span><span className={`rounded px-2 py-1 ${source.riskLevel === "medium" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{source.riskLevel === "medium" ? "需谨慎" : "低风险"}</span></div>{source.publishedDate && <p className="mt-2 text-[11px] text-slate-500">发布时间：{source.publishedDate}</p>}<p className="mt-2 text-xs leading-5 text-slate-500">{source.content}</p><a className="mt-2 inline-block text-xs text-indigo-700 hover:underline" href={source.url} target="_blank" rel="noreferrer">打开原始网页 ↗</a></details>)}</div></section></>}
         </div>
 
         <form onSubmit={(event) => { event.preventDefault(); void createTask(); }} className="border-t border-slate-100 p-4"><div className="flex gap-3"><input value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={stage === "running"} className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 text-sm disabled:bg-slate-100" placeholder={stage === "running" ? "当前任务执行完成后可创建新任务" : "描述你想调研的主题…"} /><button disabled={stage === "running"} className="rounded-xl bg-indigo-600 px-5 text-sm font-medium text-white disabled:bg-slate-300">创建任务</button></div></form>
