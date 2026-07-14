@@ -10,7 +10,7 @@ type Source = { title: string; url: string; content: string; domain?: string; qu
 type Review = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: { valid: boolean; issues: string[]; citationCount: number } };
 type HarnessBudget = { limits: { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number }; usage: { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string } };
 type RuntimeHealth = { ready: boolean; model: string; deepSeekConfigured: boolean; tavilyConfigured: boolean; remoteMcpEnabled: boolean; allowedMcpHostCount: number };
-type Stage = "idle" | "approval" | "paused" | "running" | "done" | "failed";
+type Stage = "idle" | "approval" | "paused" | "running" | "done" | "failed" | "cancelled";
 type SavedTask = {
   id: string;
   topic: string;
@@ -48,6 +48,7 @@ const colors: Record<StepState, string> = {
 function stageFromStatus(status: string): Stage {
   if (status === "waiting_approval") return "approval";
   if (status === "completed") return "done";
+  if (status === "cancelled") return "cancelled";
   if (status === "paused" || status === "running" || status === "failed") return status;
   return "idle";
 }
@@ -80,18 +81,6 @@ function durationLabel(startedAt: string, completedAt: string, now: number) {
   const end = completedAt ? new Date(completedAt).getTime() : now;
   const seconds = Math.max(0, Math.floor((end - new Date(startedAt).getTime()) / 1000));
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
-
-async function waitForTask(taskId: string): Promise<SavedTask> {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    const response = await fetch(`/api/tasks/${taskId}`, { cache: "no-store" });
-    const payload = await response.json() as ResearchPayload;
-    if (!response.ok || !payload.task) throw new Error(payload.error ?? "任务状态读取失败。");
-    if (payload.task.status === "completed") return payload.task;
-    if (payload.task.status === "failed") throw new Error(payload.task.error ?? "并发执行的任务失败。");
-  }
-  throw new Error("任务仍在执行，请稍后从运行记录重新打开。");
 }
 
 export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string }) {
@@ -157,21 +146,14 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
 
   useEffect(() => {
     if (stage !== "running" || !taskId) return;
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const response = await fetch(`/api/tasks/${taskId}`, { cache: "no-store" });
-        const payload = await response.json() as ResearchPayload;
-        if (!response.ok || !payload.task) throw new Error(payload.error ?? "实时状态读取失败。");
-        if (payload.task.status === "waiting_approval") return;
-        if (!cancelled) hydrateTask(payload.task);
-      } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? `进度同步失败：${caught.message}` : "进度同步失败。");
-      }
+    const stream = new EventSource(`/api/tasks/${taskId}/events`);
+    const receive = (event: MessageEvent<string>) => {
+      const payload = JSON.parse(event.data) as ResearchPayload;
+      if (payload.task) hydrateTask(payload.task);
     };
-    void refresh();
-    const interval = window.setInterval(refresh, 1500);
-    return () => { cancelled = true; window.clearInterval(interval); };
+    stream.addEventListener("snapshot", receive);
+    stream.onerror = () => setError("实时事件连接暂时中断，浏览器将自动重连。");
+    return () => stream.close();
   }, [hydrateTask, stage, taskId]);
 
   useEffect(() => {
@@ -192,7 +174,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
     setEvents([...(payload.task.events ?? []), "权限检查：Multi-Agent 工作流需要用户确认"]);
   }
 
-  async function taskAction(action: "pause" | "resume" | "retry") {
+  async function taskAction(action: "pause" | "resume" | "retry" | "cancel") {
     const response = await fetch(`/api/tasks/${taskId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
     const payload = await response.json() as ResearchPayload;
     if (!response.ok || !payload.task) { setError(payload.error ?? "操作失败。"); return; }
@@ -207,12 +189,8 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
       const response = await fetch("/api/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId, approval: { externalTools: true } }) });
       const payload = await response.json() as ResearchPayload;
       if (!response.ok) throw new Error(payload.error ?? "任务执行请求失败。");
-      if (response.status === 202) {
-        setEvents((previous) => [...previous, "幂等检查：任务已由另一请求启动，正在复用执行结果"]);
-        hydrateTask(await waitForTask(taskId));
-        return;
-      }
       if (!payload.task) throw new Error("未获得有效任务结果。");
+      if (response.status === 202) setEvents((previous) => [...previous, payload.message ?? "任务已进入后台执行队列"]);
       hydrateTask(payload.task);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "任务执行失败。";
@@ -224,7 +202,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
 
   const elapsed = durationLabel(startedAt, completedAt, now);
   const canExecute = runtimeHealth?.ready !== false;
-  const stageLabel: Record<Stage, string> = { idle: "等待任务", approval: "等待审批", paused: "已暂停", running: "执行中", done: "已完成", failed: "执行失败" };
+  const stageLabel: Record<Stage, string> = { idle: "等待任务", approval: "等待审批", paused: "已暂停", running: "执行中", done: "已完成", failed: "执行失败", cancelled: "已取消" };
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_380px]">
@@ -239,8 +217,8 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
           {runtimeHealth && <div className={`rounded-xl border p-4 text-sm ${runtimeHealth.ready ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">运行环境 {runtimeHealth.ready ? "已就绪" : "未就绪"}</span><span className="font-mono text-xs">{runtimeHealth.model}</span></div><p className="mt-1 text-xs leading-5">DeepSeek：{runtimeHealth.deepSeekConfigured ? "已配置" : "缺少 Key"} · Tavily：{runtimeHealth.tavilyConfigured ? "已配置" : "缺少 Key"} · 远程 MCP：{runtimeHealth.remoteMcpEnabled ? "已启用" : "未启用（可选）"}</p></div>}
           {stage === "approval" && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><p className="font-medium text-amber-900">需要你的批准</p><p className="mt-1 text-sm leading-6 text-amber-800">Planner、Executor 与 Reviewer 将分别调用模型。系统会先获取唯一执行权，避免重复请求产生费用。</p>{!canExecute && <p className="mt-3 text-sm text-red-700">请先在 .env.local 配置缺失的 DeepSeek 或 Tavily Key，然后重启开发服务器。</p>}<div className="mt-4 flex gap-3"><button onClick={approve} disabled={!canExecute} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:bg-slate-300">批准并继续</button><button onClick={() => taskAction("pause")} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm">暂停任务</button></div></div>}
           {stage === "paused" && <div className="rounded-xl border border-slate-200 bg-slate-50 p-5"><p className="font-medium">任务已暂停</p><p className="mt-1 text-sm text-slate-600">恢复点已持久化，可以继续当前任务。</p><button onClick={() => taskAction("resume")} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">恢复任务</button></div>}
-          {stage === "failed" && <button onClick={() => taskAction("retry")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">重置并重试</button>}
-          {stage === "running" && <div className="rounded-xl bg-indigo-50 p-5 text-sm text-indigo-800"><div className="flex items-center justify-between"><span>正在同步真实执行进度，每 1.5 秒刷新</span><span className="font-mono text-xs">{elapsed}</span></div>{executionId && <p className="mt-2 truncate font-mono text-xs text-indigo-500">execution: {executionId}</p>}</div>}
+          {(stage === "failed" || stage === "cancelled") && <button onClick={() => taskAction("retry")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">重置并重试</button>}
+          {stage === "running" && <div className="rounded-xl bg-indigo-50 p-5 text-sm text-indigo-800"><div className="flex items-center justify-between"><span>后台 Worker 执行中，SSE 实时推送步骤</span><span className="font-mono text-xs">{elapsed}</span></div>{executionId && <p className="mt-2 truncate font-mono text-xs text-indigo-500">execution: {executionId}</p>}<button onClick={() => taskAction("cancel")} className="mt-3 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs text-indigo-700">取消任务</button></div>}
           {error && <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error}</div>}
           {review && <div className={`flex items-center justify-between rounded-xl border p-4 text-sm ${review.approved ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}><span>Reviewer {review.approved ? "已通过" : "要求修订"} · {attempts} 轮执行{review.citationCheck ? ` · ${review.citationCheck.citationCount} 个有效引用` : ""}</span><strong className="text-lg">{review.score}/100</strong></div>}
 

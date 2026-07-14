@@ -1,4 +1,4 @@
-export type TaskStatus = "waiting_approval" | "paused" | "running" | "completed" | "failed";
+export type TaskStatus = "waiting_approval" | "paused" | "running" | "completed" | "failed" | "cancelled";
 export type SourceRiskLevel = "low" | "medium" | "high";
 export type ResearchSource = { title: string; url: string; content: string; domain: string; qualityScore: number; riskLevel: SourceRiskLevel; riskReasons: string[] };
 export type ResearchPlan = { searchQuery: string; subquestions: string[]; successCriteria: string[] };
@@ -27,6 +27,7 @@ export interface ResearchTask {
   executionId?: string;
   startedAt?: string;
   completedAt?: string;
+  cancelledAt?: string;
   attempts?: number;
   events?: string[];
   error?: string;

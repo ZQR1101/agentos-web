@@ -55,6 +55,12 @@ jobs:
       - name: Source diversity test
         run: npm run test:source
 
+      - name: Background workflow test
+        run: npm run test:workflow
+
+      - name: SSE task event test
+        run: npm run test:events
+
       - name: Source Policy safety evaluation
         run: npm run eval:safety
 
