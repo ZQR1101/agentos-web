@@ -1,6 +1,14 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ResearchTask, TaskStatus } from "@/types/task";
+import { getPostgresTaskStore } from "@/lib/postgres-task-store";
+import type { TaskPatch, TransitionResult } from "@/lib/task-store-types";
+
+export type { TaskPatch, TransitionResult } from "@/lib/task-store-types";
+
+export function getTaskStoreMode(environment: NodeJS.ProcessEnv = process.env) {
+  return environment.DATABASE_URL?.trim() ? "postgres" as const : "json" as const;
+}
 
 let writeQueue: Promise<void> = Promise.resolve();
 
@@ -41,10 +49,14 @@ async function readAfterPendingWrites() {
 }
 
 export async function listTasks() {
+  const postgres = getPostgresTaskStore();
+  if (postgres) return postgres.listTasks();
   return (await readAfterPendingWrites()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function getTask(id: string) {
+  const postgres = getPostgresTaskStore();
+  if (postgres) return postgres.getTask(id);
   return (await readAfterPendingWrites()).find((task) => task.id === id);
 }
 
@@ -60,6 +72,8 @@ export async function createTask(topic: string) {
     createdAt: now,
     updatedAt: now,
   };
+  const postgres = getPostgresTaskStore();
+  if (postgres) return postgres.createTask(task);
   return withWriteLock(async () => {
     const tasks = await readTasks();
     tasks.push(task);
@@ -68,9 +82,9 @@ export async function createTask(topic: string) {
   });
 }
 
-type TaskPatch = Partial<ResearchTask> | ((current: ResearchTask) => Partial<ResearchTask>);
-
 export async function updateTask(id: string, patch: TaskPatch) {
+  const postgres = getPostgresTaskStore();
+  if (postgres) return postgres.updateTask(id, patch);
   return withWriteLock(async () => {
     const tasks = await readTasks();
     const index = tasks.findIndex((task) => task.id === id);
@@ -84,12 +98,9 @@ export async function updateTask(id: string, patch: TaskPatch) {
   });
 }
 
-export type TransitionResult =
-  | { outcome: "updated"; task: ResearchTask }
-  | { outcome: "not_found" }
-  | { outcome: "status_mismatch"; task: ResearchTask };
-
 export async function transitionTask(id: string, allowedStatuses: readonly TaskStatus[], patch: TaskPatch): Promise<TransitionResult> {
+  const postgres = getPostgresTaskStore();
+  if (postgres) return postgres.transitionTask(id, allowedStatuses, patch);
   return withWriteLock(async () => {
     const tasks = await readTasks();
     const index = tasks.findIndex((task) => task.id === id);

@@ -20,7 +20,7 @@
 - **双层质量门禁**：Reviewer 负责语义质量，Harness 程序化核对引用编号、原始 URL 和未授权外链，任一检查失败都会触发修订或终止。
 - **确定性引用渲染**：Writer 只输出 `[来源 N]`；服务端按来源编号生成最终 URL，并移除模型输出的其他外链，避免模型手抄链接破坏白名单。
 - **安全评测门禁**：CI 运行 10 个来源策略样本和 5 个引用完整性用例；当前回归集的高风险拒绝召回率与可用来源保留率均为 100%。
-- **任务持久化**：Task、Plan、Sources、Report、Review 和 Events 保存至 `.data/tasks.json`，刷新后仍可恢复。
+- **可切换持久化与队列**：默认使用 JSON Task Store + 进程内 Worker；配置 `DATABASE_URL` 与 `REDIS_URL` 后切换为 PostgreSQL 事务存储 + BullMQ 独立 Worker。
 - **可观测性**：记录 Agent 交接、当前步骤、Reviewer 分数、执行轮数、失败原因和模型响应 ID。
 - **后台 Worker + SSE**：审批后 API 立即返回，单进程 Worker 在后台执行；工作台通过 SSE 接收持久化快照，并支持协作式取消后续步骤。
 
@@ -65,7 +65,7 @@ flowchart LR
 - Tavily Search API
 - Model Context Protocol TypeScript SDK 1.29（InMemory + Streamable HTTP）
 - React Markdown + GFM
-- 本地 JSON Task Store（可替换为 SQLite/PostgreSQL）
+- PostgreSQL（可选生产 Task Store）+ Redis/BullMQ（可选独立 Worker 队列）
 
 ## 本地运行
 
@@ -84,9 +84,26 @@ TAVILY_API_KEY=你的密钥
 # 可选：启用带认证的远程 MCP Endpoint
 MCP_ACCESS_TOKEN=一段足够长的随机值
 MCP_ALLOWED_HOSTS=localhost:3000,127.0.0.1:3000
+# 可选：生产模式。两项要同时配置，再额外启动 npm run worker。
+DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/agentos
+REDIS_URL=redis://HOST:6379
 ```
 
 打开 `http://localhost:3000`。不要提交 `.env.local` 或在截图、Issue 中暴露完整密钥。
+
+### 生产队列模式
+
+本地开发不需要安装 PostgreSQL 或 Redis：未配置时，应用仍使用 JSON 文件和进程内 Worker。要以多进程方式运行，请配置 `DATABASE_URL` 与 `REDIS_URL`，先初始化表结构，再分别启动 Web 与 Worker：
+
+```bash
+npm run db:migrate
+npm run build
+npm run start
+# 在另一个终端
+npm run worker
+```
+
+Web 进程只负责审批、原子领取任务和投递 BullMQ；独立 Worker 从 Redis 取任务，并通过 PostgreSQL 读取、更新同一个 Task。若只配置 Redis 而没有 PostgreSQL，系统会拒绝入队并显示明确错误，避免 Worker 与 Web 使用两份任务状态。
 
 ## 主要目录
 
@@ -98,7 +115,10 @@ src/lib/harness-budget  步骤、模型、工具与耗时预算执行器
 src/lib/mcp/             Research MCP Server 与 Harness Client
 src/lib/skills/          版本化 Skill 定义、契约、执行器与注册表
 src/lib/tool-policy.ts   默认拒绝的工具注册与授权策略
-src/lib/task-store.ts    本地任务持久化
+src/lib/task-store.ts    JSON / PostgreSQL 双模式任务持久化
+src/lib/postgres-task-store.ts PostgreSQL 事务适配器
+src/lib/task-worker.ts   进程内 / BullMQ 双模式任务队列
+src/worker.ts            BullMQ 独立 Worker 入口
 src/lib/source-policy.ts 来源评分、提示注入检测与引用校验
 evals/                   Source Policy 标签样本与离线评测脚本
 src/components/ChatBox   工作台和审批交互
@@ -116,22 +136,25 @@ npm run test:harness
 npm run test:skills
 npm run test:tools
 npm run test:health
+npm run test:workflow
+npm run test:events
+npm run test:queue
 npm run eval:safety
 npm run build
 ```
 
 ## 当前边界
 
-- JSON Task Store 使用进程内写锁与临时文件原子替换，能够处理单进程并发；它仍不适合多实例或 Serverless 生产部署。
-- 当前 Worker 与队列注册表仍在单个 Node.js 进程内；SSE 和协作式取消已可用，但进程重启不会恢复正在运行的任务，也无法强制中止正在进行的第三方 HTTP 请求。
+- 未配置 `DATABASE_URL` / `REDIS_URL` 时会使用 JSON + 进程内 Worker，适合本地演示但不适合多实例或 Serverless。生产队列模式已经提供 PostgreSQL 事务存储与 BullMQ 独立 Worker；仍需由部署环境提供高可用 PostgreSQL、Redis、备份和监控。
+- SSE 和协作式取消已可用；取消会阻止后续 Agent 步骤，但无法强制中止已经发出的第三方 HTTP 请求。
 - 当前 Source Policy 是启发式规则，生产版本还应增加域名信誉库、发布时间校验、内容抓取验证和专门的安全评测集。
 - 当前 100% 指标仅针对仓库内 10 个小型合成/回归样本，不代表开放网络上的泛化安全性。
 - 远程 MCP 默认关闭；只有同时配置访问令牌和 Host Allowlist 才能开放，避免公开消耗 Tavily 配额。
 
 ## 下一步
 
-1. 将 Task Store 替换为 PostgreSQL，并使用事务、唯一约束和分布式执行租约保证多实例幂等性。
-2. 将单进程 Worker 替换为 Redis/BullMQ Worker，并把取消信号传播到外部 HTTP 请求。
+1. 加入分布式执行租约与 Worker 崩溃后的任务回收机制。
+2. 将取消信号传播到外部 HTTP 请求。
 3. 将 Source Policy 评测扩展到真实网页、混淆注入、多语言变体与人工标注数据。
 4. 增加动态 Tool Registry，支持多个 MCP Server 的连接、权限与健康检查。
 
