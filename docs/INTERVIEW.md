@@ -23,6 +23,10 @@ Planner 输出 `ResearchPlan`；Executor 接收计划和搜索来源并输出 Ma
 
 Harness 将修订次数限制为一次。Reviewer 第二次仍不通过时，任务进入失败状态并保存原因，等待用户重试。
 
+### 两个请求同时执行同一个 Task 会发生什么？
+
+Task Store 将状态检查与 `waiting_approval → running` 更新放在同一个串行临界区，只有一个请求能获得带 `executionId` 的执行权。其他请求看到 `running` 时返回 202 并轮询复用结果，看到 `completed` 时直接返回已持久化结果，因此不会重复调用 DeepSeek 或 Tavily。并发测试会用 20 个请求竞争同一个任务，断言只有一个成功 claim。
+
 ### 如何保证可控？
 
 外部搜索和模型调用前需要人工审批；任务支持暂停、恢复和失败重试；密钥只存在服务端。网页摘要统一视为不可信数据，Source Policy 会进行 URL 校验、质量评分和提示注入检测，高风险来源不会进入模型上下文。
@@ -45,6 +49,7 @@ Harness 将修订次数限制为一次。Reviewer 第二次仍不通过时，任
 
 - 设计并实现 Planner–Executor–Reviewer 多 Agent 工作流，以结构化 JSON/TypeScript Schema 完成任务计划、工具结果、报告与审核意见的角色交接。
 - 构建带退出条件的 Agent Harness：支持人工审批、任务暂停/恢复、失败重试及最多一次自动修订，避免不可控工具调用和无限循环。
+- 为任务执行实现原子状态转换与幂等响应，避免并发请求重复调用模型；以串行写锁和临时文件原子替换保护本地持久化，并编写并发竞争测试。
 - 接入 Tavily 实时网页检索与 DeepSeek 模型 API，生成带可验证来源的 Markdown 调研报告，并记录 Agent 事件、评分、执行轮数和响应 ID。
 - 基于官方 MCP TypeScript SDK 实现 Research MCP Server 与 Client，支持工具发现、结构化调用、InMemory/Streamable HTTP 双 Transport 及合约测试。
 - 设计 Source Policy 安全层，对外部摘要进行质量评分、提示注入检测与高风险隔离，并以确定性引用校验配合 LLM Reviewer 构成双层质量门禁。
@@ -53,7 +58,7 @@ Harness 将修订次数限制为一次。Reviewer 第二次仍不通过时，任
 ## 可继续追问自己的问题
 
 - 为什么选择显式状态机，而不是让 Agent 自由决定全部步骤？
-- 如果两个请求同时执行同一个 Task，如何保证幂等性？
+- 如果部署多个 Worker，如何把进程内 claim 升级为数据库事务和带过期时间的执行租约？
 - 如何防御网页来源中的 Prompt Injection？
 - 怎样评估 Planner、检索、写作和 Reviewer 各自的质量？
 - 为什么 Harness 内部选 InMemory Transport，而对外提供 Streamable HTTP？

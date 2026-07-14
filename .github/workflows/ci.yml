@@ -37,5 +37,8 @@ jobs:
       - name: MCP contract test
         run: npm run test:mcp
 
+      - name: Task Store concurrency test
+        run: npm run test:store
+
       - name: Production build
         run: npm run build

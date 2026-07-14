@@ -2,8 +2,9 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { searchWithResearchMcp } from "@/lib/mcp/research-client";
 import { validateReportCitations } from "@/lib/source-policy";
-import { getTask, updateTask } from "@/lib/task-store";
+import { getTask, transitionTask, updateTask } from "@/lib/task-store";
 import type { ResearchPlan, ResearchSource, ReviewResult } from "@/types/task";
+import type { ResearchTask } from "@/types/task";
 
 export const runtime = "nodejs";
 const model = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
@@ -36,17 +37,52 @@ async function runReviewer(client: OpenAI, topic: string, plan: ResearchPlan, re
   };
 }
 
+function completedPayload(task: ResearchTask, idempotent = false) {
+  return {
+    task,
+    report: task.report,
+    sources: task.sources,
+    plan: task.plan,
+    review: task.review,
+    mcp: task.mcp,
+    attempts: task.attempts,
+    events: task.events,
+    model: task.model,
+    responseId: task.responseId,
+    idempotent,
+  };
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { taskId?: unknown } | null;
   if (typeof body?.taskId !== "string") return NextResponse.json({ error: "请提供任务 ID。" }, { status: 400 });
-  const task = await getTask(body.taskId);
-  if (!task) return NextResponse.json({ error: "任务不存在。" }, { status: 404 });
-  if (task.status !== "waiting_approval" && task.status !== "failed") return NextResponse.json({ error: "当前任务状态不能执行。" }, { status: 409 });
+  const requestedTask = await getTask(body.taskId);
+  if (!requestedTask) return NextResponse.json({ error: "任务不存在。" }, { status: 404 });
+  if (requestedTask.status === "completed") return NextResponse.json(completedPayload(requestedTask, true));
+  if (requestedTask.status === "running") return NextResponse.json({ task: requestedTask, idempotent: true, message: "任务已经在执行中。" }, { status: 202 });
+  if (requestedTask.status !== "waiting_approval" && requestedTask.status !== "failed") return NextResponse.json({ error: "当前任务状态不能执行。" }, { status: 409 });
   if (!process.env.DEEPSEEK_API_KEY || !process.env.TAVILY_API_KEY) return NextResponse.json({ error: "服务端尚未完整配置 DeepSeek 与 Tavily Key。" }, { status: 503 });
-  const events = [...(task.events ?? []), "审批通过，Multi-Agent Loop 启动"];
+  const executionId = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
+  const claim = await transitionTask(body.taskId, ["waiting_approval", "failed"], (current) => ({
+    status: "running",
+    currentStep: 2,
+    executionId,
+    startedAt,
+    completedAt: undefined,
+    error: undefined,
+    events: [...(current.events ?? []), `执行权已获取：${executionId}`, "审批通过，Multi-Agent Loop 启动", "Planner 开始制定结构化计划"],
+  }));
+  if (claim.outcome === "not_found") return NextResponse.json({ error: "任务不存在。" }, { status: 404 });
+  if (claim.outcome === "status_mismatch") {
+    if (claim.task.status === "completed") return NextResponse.json(completedPayload(claim.task, true));
+    if (claim.task.status === "running") return NextResponse.json({ task: claim.task, idempotent: true, message: "任务已经在执行中。" }, { status: 202 });
+    return NextResponse.json({ error: "任务状态已变化，当前不能执行。", task: claim.task }, { status: 409 });
+  }
+  const task = claim.task;
+  const events = [...(task.events ?? [])];
   try {
     const client = new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" });
-    await updateTask(task.id, { status: "running", currentStep: 2, events: [...events, "Planner 开始制定结构化计划"] });
     const plan = await runPlanner(client, task.topic);
     events.push(`Planner 完成：${plan.subquestions.length} 个子问题`);
     await updateTask(task.id, { plan, currentStep: 3, events });
@@ -63,8 +99,9 @@ export async function POST(request: Request) {
     events.push(`Reviewer 评分：${review.score}，${review.approved ? "通过" : "需要修订"}`);
     if (!review.approved) { attempts = 2; written = await runWriter(client, task.topic, plan, sources, review.revisionInstructions); events.push("Harness 触发一次修订"); review = await runReviewer(client, task.topic, plan, written.report, sources); events.push(`Reviewer 复核评分：${review.score}，${review.approved ? "通过" : "未通过"}`); }
     if (!review.approved) throw new Error(`Reviewer 未通过：${review.issues.join("；")}`);
-    const completed = await updateTask(task.id, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, mcp: mcpResult.trace, attempts, events, model, responseId: written.responseId });
-    return NextResponse.json({ task: completed, report: written.report, sources, plan, review, mcp: mcpResult.trace, attempts, events, model, responseId: written.responseId });
+    const completed = await updateTask(task.id, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, mcp: mcpResult.trace, attempts, events, model, responseId: written.responseId, completedAt: new Date().toISOString() });
+    if (!completed) throw new Error("任务在完成持久化时丢失。");
+    return NextResponse.json(completedPayload(completed));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Multi-Agent 执行失败。";
     events.push(message);
