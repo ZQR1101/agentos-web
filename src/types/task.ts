@@ -6,13 +6,15 @@ export type SourceFreshness = "current" | "recent" | "aging" | "unknown";
 export type ResearchSource = { title: string; url: string; content: string; domain: string; qualityScore: number; riskLevel: SourceRiskLevel; riskReasons: string[]; sourceType?: SourceType; credibility?: SourceCredibility; freshness?: SourceFreshness; publishedDate?: string; qualityReasons?: string[] };
 export type ResearchPlan = { searchQuery: string; subquestions: string[]; successCriteria: string[] };
 export type CitationCheck = { valid: boolean; issues: string[]; citationCount: number };
-export type ReviewResult = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: CitationCheck };
+export type ReviewResult = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: CitationCheck; invocation?: ModelInvocation };
 export type McpCallTrace = { serverName: string; serverVersion: string; toolName: string; transport: "in-memory"; discoveredTools: string[] };
 export type HarnessLimits = { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number };
 export type HarnessUsage = { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string };
 export type HarnessBudgetSnapshot = { limits: HarnessLimits; usage: HarnessUsage };
 export type SkillCallTrace = { id: string; version: string };
 export type EvidenceCoverage = { method: "source-breadth-heuristic"; score: number; sourceCount: number; targetSourceCount: number; sourceTypeDiversity: number; highCredibilitySourceCount: number; recentSourceCount: number; citedSourceCount?: number; requiredCitedSourceCount?: number; notes: string[] };
+export type ModelInvocation = { agent: "Planner" | "Executor" | "Reviewer"; model: string; responseId?: string; latencyMs: number; promptTokens?: number; completionTokens?: number; totalTokens?: number; estimatedCostUsd?: number };
+export type TaskObservability = { startedAt: string; updatedAt: string; completedAt?: string; totalDurationMs: number; totalTokens: number; estimatedCostUsd?: number; modelCalls: ModelInvocation[] };
 
 export interface ResearchTask {
   id: string;
@@ -29,6 +31,7 @@ export interface ResearchTask {
   harnessBudget?: HarnessBudgetSnapshot;
   skill?: SkillCallTrace;
   evidenceCoverage?: EvidenceCoverage;
+  observability?: TaskObservability;
   executionId?: string;
   startedAt?: string;
   completedAt?: string;
