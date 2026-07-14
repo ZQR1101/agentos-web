@@ -8,6 +8,7 @@ type StepState = "done" | "active" | "waiting" | "queued" | "failed";
 type Step = { title: string; detail: string; state: StepState; kind: string };
 type Source = { title: string; url: string; content: string; domain?: string; qualityScore?: number; riskLevel?: "low" | "medium" | "high"; riskReasons?: string[] };
 type Review = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: { valid: boolean; issues: string[]; citationCount: number } };
+type HarnessBudget = { limits: { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number }; usage: { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string } };
 type Stage = "idle" | "approval" | "paused" | "running" | "done" | "failed";
 type SavedTask = {
   id: string;
@@ -23,6 +24,7 @@ type SavedTask = {
   executionId?: string;
   startedAt?: string;
   completedAt?: string;
+  harnessBudget?: HarnessBudget;
 };
 type ResearchPayload = { task?: SavedTask; error?: string; message?: string };
 
@@ -106,6 +108,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
   const [executionId, setExecutionId] = useState("");
   const [startedAt, setStartedAt] = useState("");
   const [completedAt, setCompletedAt] = useState("");
+  const [harnessBudget, setHarnessBudget] = useState<HarnessBudget | null>(null);
   const [now, setNow] = useState(0);
 
   const hydrateTask = useCallback((saved: SavedTask, loaded = false) => {
@@ -118,6 +121,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
     setExecutionId(saved.executionId ?? "");
     setStartedAt(saved.startedAt ?? "");
     setCompletedAt(saved.completedAt ?? "");
+    setHarnessBudget(saved.harnessBudget ?? null);
     setStage(stageFromStatus(saved.status));
     setSteps(buildSteps(saved));
     setEvents(loaded ? [...(saved.events ?? []), `已从持久化记录加载：${saved.id}`] : (saved.events ?? []));
@@ -232,7 +236,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
 
       <aside className="space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4 flex justify-between"><h2 className="font-medium">执行工作流</h2><span className="text-xs text-slate-400">5 steps</span></div><div className="space-y-3">{steps.map((step, index) => <div key={step.title} className={`rounded-xl border p-3 ${colors[step.state]}`}><div className="flex justify-between gap-2 text-sm font-medium"><span>{index + 1}. {step.title}</span><span className="text-[11px]">{step.kind}</span></div><p className="mt-1 text-xs opacity-80">{step.detail}</p></div>)}</div></section>
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-medium">Harness 事件</h2><span className="text-xs text-slate-400">live</span></div><ol className="mt-3 space-y-3 border-l border-slate-200 pl-4">{events.map((event, index) => <li key={`${event}-${index}`} className="text-xs leading-5 text-slate-600">{event}</li>)}</ol></section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-medium">Harness 事件</h2><span className="text-xs text-slate-400">live</span></div>{harnessBudget && <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]"><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">步骤 {harnessBudget.usage.steps}/{harnessBudget.limits.maxSteps}</span><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">模型 {harnessBudget.usage.modelCalls}/{harnessBudget.limits.maxModelCalls}</span><span className="rounded-lg bg-slate-50 px-2 py-2 text-slate-600">工具 {harnessBudget.usage.toolCalls}/{harnessBudget.limits.maxToolCalls}</span></div>}<ol className="mt-3 space-y-3 border-l border-slate-200 pl-4">{events.map((event, index) => <li key={`${event}-${index}`} className="text-xs leading-5 text-slate-600">{event}</li>)}</ol></section>
       </aside>
     </div>
   );

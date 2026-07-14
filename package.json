@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:mcp": "tsx --test tests/mcp*.test.ts",
     "test:store": "tsx --test tests/task-store-concurrency.test.ts",
+    "test:harness": "tsx --test tests/harness-budget.test.ts",
     "eval:safety": "tsx evals/source-policy.eval.ts"
   },
   "dependencies": {

@@ -5,6 +5,9 @@ export type ResearchPlan = { searchQuery: string; subquestions: string[]; succes
 export type CitationCheck = { valid: boolean; issues: string[]; citationCount: number };
 export type ReviewResult = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: CitationCheck };
 export type McpCallTrace = { serverName: string; serverVersion: string; toolName: string; transport: "in-memory"; discoveredTools: string[] };
+export type HarnessLimits = { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number };
+export type HarnessUsage = { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string };
+export type HarnessBudgetSnapshot = { limits: HarnessLimits; usage: HarnessUsage };
 
 export interface ResearchTask {
   id: string;
@@ -18,6 +21,7 @@ export interface ResearchTask {
   plan?: ResearchPlan;
   review?: ReviewResult;
   mcp?: McpCallTrace;
+  harnessBudget?: HarnessBudgetSnapshot;
   executionId?: string;
   startedAt?: string;
   completedAt?: string;

@@ -8,7 +8,8 @@
 
 - **真实 Multi-Agent**：Planner 输出结构化 JSON 计划；Executor 调用 Tavily 检索并基于来源写报告；Reviewer 独立评分和提出修订要求。
 - **真实 MCP 接入**：Research MCP Server 使用官方 TypeScript SDK 暴露 `search_web`；Harness 通过 MCP Client 完成初始化、工具发现和工具调用，并对瞬时空结果执行有限指数退避重试。
-- **受控 Agent Loop**：Reviewer 未通过时由 Harness 触发一次修订，达到上限后终止，避免无限循环。
+- **真实 Harness 预算**：每个外部动作在执行前统一扣减步骤、模型调用和工具调用预算，同时检查总耗时；超限立即失败关闭，不依赖 Prompt 自觉停止。
+- **受控 Agent Loop**：Reviewer 未通过时由 Harness 触发一次修订；默认最多 8 个外部步骤、5 次模型调用、3 次工具调用和 180 秒，避免无限循环与失控消耗。
 - **幂等执行与并发保护**：Harness 通过原子状态转换获取唯一执行权；重复请求复用运行中或已完成的任务，不会重复产生模型与搜索费用。
 - **Human-in-the-loop**：外部搜索和模型调用前必须获得用户批准，任务可在审批节点暂停和恢复。
 - **可验证来源**：报告只能依据搜索摘要生成，并展示可点击的原始网页链接。
@@ -43,13 +44,13 @@ flowchart LR
 
 1. 用户创建任务，服务端生成 Task 并保存。
 2. 系统停在审批节点；用户可以批准、暂停或稍后恢复。
-3. Harness 原子地将 Task 从待审批切换为执行中并写入 `executionId`；并发请求只能复用已有执行。
+3. Harness 原子地将 Task 从待审批切换为执行中并写入 `executionId`；并发请求只能复用已有执行。随后启用预算执行器，每次外部动作前先持久化授权和用量。
 4. Planner 将目标转换为 `searchQuery`、`subquestions` 和 `successCriteria`。
 5. Harness 与 Research MCP Server 建立连接，执行 `tools/list` 发现 `search_web`，再通过 `tools/call` 发起搜索。
 6. MCP Tool 调用 Tavily 获取候选来源；瞬时空结果最多重试 3 次，并记录实际尝试次数；Source Policy 校验 URL、清洗摘要、检测提示注入并按质量排序，最多保留 6 个来源。
 7. Executor 将来源作为不可信数据隔离后交给 DeepSeek，生成带引用的 Markdown 报告。
 8. Harness 先程序化校验引用编号、URL 和外链白名单，再由 Reviewer 返回结构化审核结果。
-9. 任一质量门禁未通过时最多修订一次；通过后保存报告、执行 ID、MCP 调用轨迹、来源评分和完整事件记录。
+9. 任一质量门禁未通过时最多修订一次；通过后保存报告、执行 ID、MCP 调用轨迹、Harness 预算结算、来源评分和完整事件记录。
 
 单次任务至少调用 DeepSeek 3 次；触发修订时最多调用 5 次。
 
@@ -89,6 +90,7 @@ MCP_ALLOWED_HOSTS=localhost:3000,127.0.0.1:3000
 src/app/api/tasks/       Task 创建、查询、暂停、恢复与重试
 src/app/api/research/    Multi-Agent Loop 与外部工具调用
 src/app/api/mcp/research 标准 Streamable HTTP MCP Endpoint
+src/lib/harness-budget  步骤、模型、工具与耗时预算执行器
 src/lib/mcp/             Research MCP Server 与 Harness Client
 src/lib/task-store.ts    本地任务持久化
 src/lib/source-policy.ts 来源评分、提示注入检测与引用校验
@@ -104,6 +106,7 @@ src/types/task.ts        Agent 结构化交接协议
 npm run lint
 npm run test:mcp
 npm run test:store
+npm run test:harness
 npm run eval:safety
 npm run build
 ```
