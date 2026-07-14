@@ -1,7 +1,9 @@
 export type TaskStatus = "waiting_approval" | "paused" | "running" | "completed" | "failed";
-export type ResearchSource = { title: string; url: string; content: string };
+export type SourceRiskLevel = "low" | "medium" | "high";
+export type ResearchSource = { title: string; url: string; content: string; domain: string; qualityScore: number; riskLevel: SourceRiskLevel; riskReasons: string[] };
 export type ResearchPlan = { searchQuery: string; subquestions: string[]; successCriteria: string[] };
-export type ReviewResult = { approved: boolean; score: number; issues: string[]; revisionInstructions: string };
+export type CitationCheck = { valid: boolean; issues: string[]; citationCount: number };
+export type ReviewResult = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: CitationCheck };
 
 export interface ResearchTask {
   id: string;
