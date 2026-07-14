@@ -4,6 +4,7 @@ export type ResearchSource = { title: string; url: string; content: string; doma
 export type ResearchPlan = { searchQuery: string; subquestions: string[]; successCriteria: string[] };
 export type CitationCheck = { valid: boolean; issues: string[]; citationCount: number };
 export type ReviewResult = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: CitationCheck };
+export type McpCallTrace = { serverName: string; serverVersion: string; toolName: string; transport: "in-memory"; discoveredTools: string[] };
 
 export interface ResearchTask {
   id: string;
@@ -16,6 +17,7 @@ export interface ResearchTask {
   responseId?: string;
   plan?: ResearchPlan;
   review?: ReviewResult;
+  mcp?: McpCallTrace;
   attempts?: number;
   events?: string[];
   error?: string;

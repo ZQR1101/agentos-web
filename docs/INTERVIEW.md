@@ -5,7 +5,7 @@
 1. 在任务工作台输入一个需要最新信息和来源的调研问题。
 2. 展示任务创建后停在人工审批节点，说明外部调用不会静默执行。
 3. 点击暂停，刷新页面，再从“运行记录”打开并恢复，证明任务已经持久化。
-4. 批准执行，观察 Planner、Executor、Reviewer 的事件交接。
+4. 批准执行，观察 MCP 工具发现与调用，以及 Planner、Executor、Reviewer 的事件交接。
 5. 展示 Reviewer 分数、程序化引用检查、来源质量分和提示注入风险标签。
 6. 打开“工作流”“Agents”“工具权限”页面，说明角色边界、Loop 退出条件和权限策略。
 
@@ -31,6 +31,10 @@ Harness 将修订次数限制为一次。Reviewer 第二次仍不通过时，任
 
 会，所以不能只依赖模型自评。Harness 在 Reviewer 之外确定性校验引用编号、URL 是否与搜索结果一致，以及报告是否混入未授权外链。模型语义审核与程序规则必须同时通过。
 
+### 这里的 MCP 是真实协议还是页面模拟？
+
+是真实协议。项目使用官方 TypeScript SDK 创建 Research MCP Server，注册带 Zod 输入输出 Schema 和只读注解的 `search_web` Tool。Harness 侧使用 MCP Client 先初始化，再执行 `tools/list` 和 `tools/call`。单元测试使用 InMemory Transport 完整跑协议，远程客户端则可通过带 Bearer Token 和 Host Allowlist 的 Streamable HTTP Endpoint 连接。
+
 ### 当前最大的技术债是什么？
 
 本地 JSON 存储与同步执行只适合单机 Demo。生产化需要 PostgreSQL、后台任务队列、SSE、幂等执行、分布式锁和可取消 Worker。
@@ -42,6 +46,7 @@ Harness 将修订次数限制为一次。Reviewer 第二次仍不通过时，任
 - 设计并实现 Planner–Executor–Reviewer 多 Agent 工作流，以结构化 JSON/TypeScript Schema 完成任务计划、工具结果、报告与审核意见的角色交接。
 - 构建带退出条件的 Agent Harness：支持人工审批、任务暂停/恢复、失败重试及最多一次自动修订，避免不可控工具调用和无限循环。
 - 接入 Tavily 实时网页检索与 DeepSeek 模型 API，生成带可验证来源的 Markdown 调研报告，并记录 Agent 事件、评分、执行轮数和响应 ID。
+- 基于官方 MCP TypeScript SDK 实现 Research MCP Server 与 Client，支持工具发现、结构化调用、InMemory/Streamable HTTP 双 Transport 及合约测试。
 - 设计 Source Policy 安全层，对外部摘要进行质量评分、提示注入检测与高风险隔离，并以确定性引用校验配合 LLM Reviewer 构成双层质量门禁。
 - 实现任务持久化与运行记录，支持刷新后恢复任务，为后续迁移 PostgreSQL、后台 Worker 和 SSE 预留清晰边界。
 
@@ -51,4 +56,5 @@ Harness 将修订次数限制为一次。Reviewer 第二次仍不通过时，任
 - 如果两个请求同时执行同一个 Task，如何保证幂等性？
 - 如何防御网页来源中的 Prompt Injection？
 - 怎样评估 Planner、检索、写作和 Reviewer 各自的质量？
-- 如何将 Tavily 工具改造成 MCP Server？
+- 为什么 Harness 内部选 InMemory Transport，而对外提供 Streamable HTTP？
+- 如何为多个 MCP Server 增加动态 Tool Registry、权限隔离和健康检查？

@@ -1,19 +1,13 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
-import { screenSources, validateReportCitations } from "@/lib/source-policy";
+import { searchWithResearchMcp } from "@/lib/mcp/research-client";
+import { validateReportCitations } from "@/lib/source-policy";
 import { getTask, updateTask } from "@/lib/task-store";
 import type { ResearchPlan, ResearchSource, ReviewResult } from "@/types/task";
 
 export const runtime = "nodejs";
 const model = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
 
-async function searchWeb(query: string) {
-  const response = await fetch("https://api.tavily.com/search", { method: "POST", headers: { Authorization: `Bearer ${process.env.TAVILY_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ query, search_depth: "basic", max_results: 10, include_answer: false }) });
-  if (!response.ok) throw new Error("网页搜索服务未能返回结果。");
-  const payload = await response.json() as { results?: Array<Pick<ResearchSource, "title" | "url" | "content">> };
-  const rawSources = (payload.results ?? []).filter((source) => source.title && source.url && source.content);
-  return screenSources(rawSources);
-}
 function parseJson<T>(content: string | null): T { if (!content) throw new Error("Agent 未返回结构化结果。"); return JSON.parse(content.replace(/^```json\s*|\s*```$/g, "")) as T; }
 async function runPlanner(client: OpenAI, topic: string) {
   const response = await client.chat.completions.create({ model, response_format: { type: "json_object" }, messages: [{ role: "system", content: "你是 Planner Agent。只输出 JSON：searchQuery 字符串、subquestions 字符串数组（3项）、successCriteria 字符串数组（3项）。搜索词要适合网页检索。" }, { role: "user", content: `为这个调研任务制定计划：${topic}` }] });
@@ -56,11 +50,12 @@ export async function POST(request: Request) {
     const plan = await runPlanner(client, task.topic);
     events.push(`Planner 完成：${plan.subquestions.length} 个子问题`);
     await updateTask(task.id, { plan, currentStep: 3, events });
-    const screened = await searchWeb(plan.searchQuery);
-    const sources = screened.sources;
+    const mcpResult = await searchWithResearchMcp(plan.searchQuery);
+    const sources = mcpResult.sources;
     if (!sources.length) throw new Error("没有找到可用网页来源。");
-    events.push(`Source Policy 完成：保留 ${sources.length} 个来源，隔离 ${screened.rejectedCount} 个`);
-    await updateTask(task.id, { sources, currentStep: 4, events });
+    events.push(`MCP Client 发现并调用 ${mcpResult.trace.serverName}/${mcpResult.trace.toolName}`);
+    events.push(`Source Policy 完成：保留 ${sources.length} 个来源，隔离 ${mcpResult.rejectedCount} 个`);
+    await updateTask(task.id, { sources, mcp: mcpResult.trace, currentStep: 4, events });
     let attempts = 1;
     let written = await runWriter(client, task.topic, plan, sources);
     events.push("Executor 完成第一版报告");
@@ -68,8 +63,8 @@ export async function POST(request: Request) {
     events.push(`Reviewer 评分：${review.score}，${review.approved ? "通过" : "需要修订"}`);
     if (!review.approved) { attempts = 2; written = await runWriter(client, task.topic, plan, sources, review.revisionInstructions); events.push("Harness 触发一次修订"); review = await runReviewer(client, task.topic, plan, written.report, sources); events.push(`Reviewer 复核评分：${review.score}，${review.approved ? "通过" : "未通过"}`); }
     if (!review.approved) throw new Error(`Reviewer 未通过：${review.issues.join("；")}`);
-    const completed = await updateTask(task.id, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, attempts, events, model, responseId: written.responseId });
-    return NextResponse.json({ task: completed, report: written.report, sources, plan, review, attempts, events, model, responseId: written.responseId });
+    const completed = await updateTask(task.id, { status: "completed", currentStep: 5, report: written.report, sources, plan, review, mcp: mcpResult.trace, attempts, events, model, responseId: written.responseId });
+    return NextResponse.json({ task: completed, report: written.report, sources, plan, review, mcp: mcpResult.trace, attempts, events, model, responseId: written.responseId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Multi-Agent 执行失败。";
     events.push(message);
