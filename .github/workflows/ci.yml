@@ -49,6 +49,9 @@ jobs:
       - name: Tool policy test
         run: npm run test:tools
 
+      - name: Runtime health test
+        run: npm run test:health
+
       - name: Source Policy safety evaluation
         run: npm run eval:safety
 

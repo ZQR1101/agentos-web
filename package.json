@@ -12,6 +12,7 @@
     "test:harness": "tsx --test tests/harness-budget.test.ts",
     "test:skills": "tsx --test tests/skill-contract.test.ts",
     "test:tools": "tsx --test tests/tool-policy.test.ts",
+    "test:health": "tsx --test tests/runtime-health.test.ts",
     "eval:safety": "tsx evals/source-policy.eval.ts"
   },
   "dependencies": {

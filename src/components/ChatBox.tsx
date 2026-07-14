@@ -9,6 +9,7 @@ type Step = { title: string; detail: string; state: StepState; kind: string };
 type Source = { title: string; url: string; content: string; domain?: string; qualityScore?: number; riskLevel?: "low" | "medium" | "high"; riskReasons?: string[] };
 type Review = { approved: boolean; score: number; issues: string[]; revisionInstructions: string; citationCheck?: { valid: boolean; issues: string[]; citationCount: number } };
 type HarnessBudget = { limits: { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number }; usage: { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string } };
+type RuntimeHealth = { ready: boolean; model: string; deepSeekConfigured: boolean; tavilyConfigured: boolean; remoteMcpEnabled: boolean; allowedMcpHostCount: number };
 type Stage = "idle" | "approval" | "paused" | "running" | "done" | "failed";
 type SavedTask = {
   id: string;
@@ -109,6 +110,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
   const [startedAt, setStartedAt] = useState("");
   const [completedAt, setCompletedAt] = useState("");
   const [harnessBudget, setHarnessBudget] = useState<HarnessBudget | null>(null);
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth | null>(null);
   const [now, setNow] = useState(0);
 
   const hydrateTask = useCallback((saved: SavedTask, loaded = false) => {
@@ -140,6 +142,18 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
       .catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "任务加载失败。"); });
     return () => { cancelled = true; };
   }, [hydrateTask, initialTaskId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/health", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json() as { runtime?: RuntimeHealth };
+        if (!response.ok || !payload.runtime) throw new Error("运行环境状态读取失败。");
+        if (!cancelled) setRuntimeHealth(payload.runtime);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (stage !== "running" || !taskId) return;
@@ -209,6 +223,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
   }
 
   const elapsed = durationLabel(startedAt, completedAt, now);
+  const canExecute = runtimeHealth?.ready !== false;
   const stageLabel: Record<Stage, string> = { idle: "等待任务", approval: "等待审批", paused: "已暂停", running: "执行中", done: "已完成", failed: "执行失败" };
 
   return (
@@ -221,7 +236,8 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
 
         <div className="min-h-80 space-y-5 px-6 py-6">
           {task ? <div className="ml-auto max-w-xl rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-3 text-sm text-white">{task}</div> : <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">试试输入：“调研 AI Agent 在企业知识管理中的应用与风险”</div>}
-          {stage === "approval" && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><p className="font-medium text-amber-900">需要你的批准</p><p className="mt-1 text-sm leading-6 text-amber-800">Planner、Executor 与 Reviewer 将分别调用模型。系统会先获取唯一执行权，避免重复请求产生费用。</p><div className="mt-4 flex gap-3"><button onClick={approve} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white">批准并继续</button><button onClick={() => taskAction("pause")} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm">暂停任务</button></div></div>}
+          {runtimeHealth && <div className={`rounded-xl border p-4 text-sm ${runtimeHealth.ready ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">运行环境 {runtimeHealth.ready ? "已就绪" : "未就绪"}</span><span className="font-mono text-xs">{runtimeHealth.model}</span></div><p className="mt-1 text-xs leading-5">DeepSeek：{runtimeHealth.deepSeekConfigured ? "已配置" : "缺少 Key"} · Tavily：{runtimeHealth.tavilyConfigured ? "已配置" : "缺少 Key"} · 远程 MCP：{runtimeHealth.remoteMcpEnabled ? "已启用" : "未启用（可选）"}</p></div>}
+          {stage === "approval" && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><p className="font-medium text-amber-900">需要你的批准</p><p className="mt-1 text-sm leading-6 text-amber-800">Planner、Executor 与 Reviewer 将分别调用模型。系统会先获取唯一执行权，避免重复请求产生费用。</p>{!canExecute && <p className="mt-3 text-sm text-red-700">请先在 .env.local 配置缺失的 DeepSeek 或 Tavily Key，然后重启开发服务器。</p>}<div className="mt-4 flex gap-3"><button onClick={approve} disabled={!canExecute} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:bg-slate-300">批准并继续</button><button onClick={() => taskAction("pause")} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm">暂停任务</button></div></div>}
           {stage === "paused" && <div className="rounded-xl border border-slate-200 bg-slate-50 p-5"><p className="font-medium">任务已暂停</p><p className="mt-1 text-sm text-slate-600">恢复点已持久化，可以继续当前任务。</p><button onClick={() => taskAction("resume")} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">恢复任务</button></div>}
           {stage === "failed" && <button onClick={() => taskAction("retry")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">重置并重试</button>}
           {stage === "running" && <div className="rounded-xl bg-indigo-50 p-5 text-sm text-indigo-800"><div className="flex items-center justify-between"><span>正在同步真实执行进度，每 1.5 秒刷新</span><span className="font-mono text-xs">{elapsed}</span></div>{executionId && <p className="mt-2 truncate font-mono text-xs text-indigo-500">execution: {executionId}</p>}</div>}
