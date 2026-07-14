@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTask, transitionTask } from "@/lib/task-store";
+import { getTask, transitionTask, updateTask } from "@/lib/task-store";
 import { enqueueResearchTask } from "@/lib/task-worker";
 import type { ResearchTask } from "@/types/task";
 
@@ -37,6 +37,18 @@ export async function POST(request: Request) {
     if (claim.task.status === "running") return NextResponse.json({ task: claim.task, idempotent: true, message: "任务已经在后台执行中。" }, { status: 202 });
     return NextResponse.json({ error: "任务状态已变化，当前不能执行。", task: claim.task }, { status: 409 });
   }
-  const queued = enqueueResearchTask(claim.task.id, executionId);
+  let queued: boolean;
+  try {
+    queued = await enqueueResearchTask(claim.task.id, executionId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "后台队列不可用。";
+    const failed = await updateTask(claim.task.id, (current) => ({
+      status: "failed",
+      completedAt: new Date().toISOString(),
+      error: `后台队列入队失败：${message}`,
+      events: [...(current.events ?? []), `后台队列入队失败：${message}`],
+    }));
+    return NextResponse.json({ error: "后台队列入队失败。", task: failed }, { status: 503 });
+  }
   return NextResponse.json({ task: claim.task, queued, message: queued ? "任务已进入后台 Worker。" : "任务已由后台 Worker 接管。" }, { status: 202 });
 }

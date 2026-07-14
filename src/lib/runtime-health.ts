@@ -5,6 +5,8 @@ export interface RuntimeHealth {
   tavilyConfigured: boolean;
   remoteMcpEnabled: boolean;
   allowedMcpHostCount: number;
+  taskStoreMode: "json" | "postgres";
+  queueMode: "in-memory" | "redis";
 }
 
 function configured(value: string | undefined) {
@@ -25,5 +27,7 @@ export function getRuntimeHealth(environment: NodeJS.ProcessEnv = process.env): 
     tavilyConfigured,
     remoteMcpEnabled: configured(environment.MCP_ACCESS_TOKEN),
     allowedMcpHostCount: allowedHosts.length,
+    taskStoreMode: configured(environment.DATABASE_URL) ? "postgres" : "json",
+    queueMode: configured(environment.REDIS_URL) ? "redis" : "in-memory",
   };
 }

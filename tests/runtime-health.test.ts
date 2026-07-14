@@ -17,6 +17,8 @@ test("Runtime health reports only configuration state and never secret values", 
     tavilyConfigured: true,
     remoteMcpEnabled: true,
     allowedMcpHostCount: 2,
+    taskStoreMode: "json",
+    queueMode: "in-memory",
   });
   assert.equal(JSON.stringify(health).includes("secret"), false);
 });
@@ -29,4 +31,6 @@ test("Runtime health reports missing required providers and defaults", () => {
   assert.equal(health.remoteMcpEnabled, false);
   assert.equal(health.allowedMcpHostCount, 0);
   assert.equal(health.model, "deepseek-v4-flash");
+  assert.equal(health.taskStoreMode, "json");
+  assert.equal(health.queueMode, "in-memory");
 });
