@@ -13,14 +13,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     ? await transitionTask(id, ["waiting_approval"], { status: "paused" })
     : body?.action === "resume"
       ? await transitionTask(id, ["paused"], { status: "waiting_approval" })
-      : body?.action === "retry"
-        ? await transitionTask(id, ["failed"], (task) => ({
+      : body?.action === "cancel"
+        ? await transitionTask(id, ["running"], (task) => ({ status: "cancelled", cancelledAt: new Date().toISOString(), events: [...(task.events ?? []), "用户请求取消任务，当前步骤结束后停止"] }))
+        : body?.action === "retry"
+        ? await transitionTask(id, ["failed", "cancelled"], (task) => ({
           status: "waiting_approval",
           currentStep: 1,
           error: undefined,
           executionId: undefined,
           startedAt: undefined,
           completedAt: undefined,
+          cancelledAt: undefined,
           report: undefined,
           sources: undefined,
           plan: undefined,

@@ -14,6 +14,8 @@
     "test:tools": "tsx --test tests/tool-policy.test.ts",
     "test:health": "tsx --test tests/runtime-health.test.ts",
     "test:source": "tsx --test tests/source-policy.test.ts",
+    "test:workflow": "tsx --test tests/research-workflow.test.ts",
+    "test:events": "tsx --test tests/task-events.test.ts",
     "eval:safety": "tsx evals/source-policy.eval.ts"
   },
   "dependencies": {
