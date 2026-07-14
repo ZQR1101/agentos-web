@@ -61,6 +61,9 @@ jobs:
       - name: SSE task event test
         run: npm run test:events
 
+      - name: Workflow end-to-end test
+        run: npm run test:e2e
+
       - name: Queue mode test
         run: npm run test:queue
 

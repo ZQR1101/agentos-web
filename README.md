@@ -138,6 +138,7 @@ npm run test:tools
 npm run test:health
 npm run test:workflow
 npm run test:events
+npm run test:e2e
 npm run test:queue
 npm run eval:safety
 npm run build
