@@ -40,5 +40,8 @@ jobs:
       - name: Task Store concurrency test
         run: npm run test:store
 
+      - name: Source Policy safety evaluation
+        run: npm run eval:safety
+
       - name: Production build
         run: npm run build
