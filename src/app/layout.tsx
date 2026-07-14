@@ -11,7 +11,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="zh-CN">
       <body>
-        <div className="flex min-h-screen">
+        <div className="min-h-screen lg:flex">
           <Sidebar />
           <div className="min-w-0 flex-1">{children}</div>
         </div>
