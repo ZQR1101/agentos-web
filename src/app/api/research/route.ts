@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     events.push(`MCP Client 发现并调用 ${mcpResult.trace.serverName}/${mcpResult.trace.toolName}`);
     events.push(`MCP 搜索完成：共尝试 ${mcpResult.searchAttempts} 次`);
     if (!sources.length) throw new Error(`连续 ${mcpResult.searchAttempts} 次搜索均未找到可用网页来源。`);
-    events.push(`Source Policy 完成：保留 ${sources.length} 个来源，隔离 ${mcpResult.rejectedCount} 个`);
+    events.push(`Source Policy 完成：保留 ${sources.length} 个来源，安全隔离 ${mcpResult.rejectedCount} 个，去重 ${mcpResult.deduplicatedCount} 个，域名多样性未采用 ${mcpResult.diversityExcludedCount} 个，数量截断 ${mcpResult.truncatedCount} 个`);
     await updateTask(task.id, { sources, mcp: mcpResult.trace, currentStep: 4, harnessBudget: budget.snapshot(), events });
     let attempts = 1;
     await authorize("model", "Executor 模型调用", 4);

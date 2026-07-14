@@ -21,6 +21,8 @@ const authoritativeDomains = [
   "worldbank.org",
 ];
 
+export const MAX_SOURCES_PER_DOMAIN = 2;
+
 function domainMatches(domain: string, candidate: string) {
   return domain === candidate || domain.endsWith(`.${candidate}`);
 }
@@ -71,17 +73,46 @@ function assessSource(source: RawResearchSource): ResearchSource | null {
 
 export function screenSources(rawSources: RawResearchSource[], limit = 6) {
   const seen = new Set<string>();
-  const assessed = rawSources.flatMap((source) => {
+  const assessed: ResearchSource[] = [];
+  let rejectedCount = 0;
+  let deduplicatedCount = 0;
+  for (const source of rawSources) {
     const result = assessSource(source);
-    if (!result || seen.has(result.url)) return [];
+    if (!result) {
+      rejectedCount += 1;
+      continue;
+    }
+    if (seen.has(result.url)) {
+      deduplicatedCount += 1;
+      continue;
+    }
     seen.add(result.url);
-    return [result];
-  });
+    assessed.push(result);
+  }
   const eligible = assessed.filter((source) => source.riskLevel !== "high" && source.qualityScore >= 35);
-  const sources = eligible
+  rejectedCount += assessed.length - eligible.length;
+  const domainCounts = new Map<string, number>();
+  let diversityExcludedCount = 0;
+  const diverseSources = eligible
     .sort((a, b) => b.qualityScore - a.qualityScore)
-    .slice(0, Math.max(1, Math.min(10, limit)));
-  return { sources, rejectedCount: rawSources.length - eligible.length };
+    .filter((source) => {
+      const current = domainCounts.get(source.domain) ?? 0;
+      if (current >= MAX_SOURCES_PER_DOMAIN) {
+        diversityExcludedCount += 1;
+        return false;
+      }
+      domainCounts.set(source.domain, current + 1);
+      return true;
+    });
+  const maxSources = Math.max(1, Math.min(10, limit));
+  const sources = diverseSources.slice(0, maxSources);
+  return {
+    sources,
+    rejectedCount,
+    deduplicatedCount,
+    diversityExcludedCount,
+    truncatedCount: Math.max(0, diverseSources.length - sources.length),
+  };
 }
 
 export function validateReportCitations(report: string, sources: ResearchSource[]) {

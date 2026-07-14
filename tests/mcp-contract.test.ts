@@ -18,6 +18,8 @@ test("Research MCP completes handshake, discovery, policy screening and tool cal
   assert.equal(result.trace.serverName, "agentos-research");
   assert.equal(result.sources.length, 2);
   assert.equal(result.rejectedCount, 1);
+  assert.equal(result.deduplicatedCount, 0);
+  assert.equal(result.diversityExcludedCount, 0);
   assert.equal(result.searchAttempts, 1);
   assert.ok(result.sources.every((source) => source.riskLevel !== "high"));
   assert.ok(result.sources[0].qualityScore >= result.sources[1].qualityScore);
