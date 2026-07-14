@@ -4,6 +4,7 @@ import { createHarnessBudget, type HarnessActionKind } from "@/lib/harness-budge
 import { searchWithResearchMcp } from "@/lib/mcp/research-client";
 import { researchReportSkill } from "@/lib/skills/research-report";
 import { getTask, transitionTask, updateTask } from "@/lib/task-store";
+import { authorizeToolCall, RESEARCH_SEARCH_TOOL_ID } from "@/lib/tool-policy";
 import type { ResearchTask } from "@/types/task";
 
 export const runtime = "nodejs";
@@ -26,13 +27,14 @@ function completedPayload(task: ResearchTask, idempotent = false) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null) as { taskId?: unknown } | null;
+  const body = await request.json().catch(() => null) as { taskId?: unknown; approval?: { externalTools?: unknown } } | null;
   if (typeof body?.taskId !== "string") return NextResponse.json({ error: "请提供任务 ID。" }, { status: 400 });
   const requestedTask = await getTask(body.taskId);
   if (!requestedTask) return NextResponse.json({ error: "任务不存在。" }, { status: 404 });
   if (requestedTask.status === "completed") return NextResponse.json(completedPayload(requestedTask, true));
   if (requestedTask.status === "running") return NextResponse.json({ task: requestedTask, idempotent: true, message: "任务已经在执行中。" }, { status: 202 });
   if (requestedTask.status !== "waiting_approval" && requestedTask.status !== "failed") return NextResponse.json({ error: "当前任务状态不能执行。" }, { status: 409 });
+  if (body.approval?.externalTools !== true) return NextResponse.json({ error: "需要明确批准外部工具与模型调用。" }, { status: 403 });
   if (!process.env.DEEPSEEK_API_KEY || !process.env.TAVILY_API_KEY) return NextResponse.json({ error: "服务端尚未完整配置 DeepSeek 与 Tavily Key。" }, { status: 503 });
   const executionId = crypto.randomUUID();
   const startedAt = new Date().toISOString();
@@ -71,6 +73,8 @@ export async function POST(request: Request) {
     budget.assertWithinDuration("Planner 完成");
     events.push(`Planner 完成：${plan.subquestions.length} 个子问题`);
     await updateTask(task.id, { plan, currentStep: 3, harnessBudget: budget.snapshot(), events });
+    const toolPolicy = authorizeToolCall(RESEARCH_SEARCH_TOOL_ID, { approved: true, requestedScope: "read" });
+    events.push(`Tool Policy 通过：${toolPolicy.id} · ${toolPolicy.scope} · 用户已批准`);
     await authorize("tool", "Research MCP/search_web", 3);
     const mcpResult = await searchWithResearchMcp(plan.searchQuery);
     budget.assertWithinDuration("Research MCP 完成");

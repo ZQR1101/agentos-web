@@ -190,7 +190,7 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
     setError("");
     setEvents((previous) => [...previous, "审批通过：正在竞争唯一执行权"]);
     try {
-      const response = await fetch("/api/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId }) });
+      const response = await fetch("/api/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId, approval: { externalTools: true } }) });
       const payload = await response.json() as ResearchPayload;
       if (!response.ok) throw new Error(payload.error ?? "任务执行请求失败。");
       if (response.status === 202) {

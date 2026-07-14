@@ -46,6 +46,9 @@ jobs:
       - name: Skill contract test
         run: npm run test:skills
 
+      - name: Tool policy test
+        run: npm run test:tools
+
       - name: Source Policy safety evaluation
         run: npm run eval:safety
 
