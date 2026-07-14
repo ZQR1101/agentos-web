@@ -18,6 +18,24 @@ test("Research MCP completes handshake, discovery, policy screening and tool cal
   assert.equal(result.trace.serverName, "agentos-research");
   assert.equal(result.sources.length, 2);
   assert.equal(result.rejectedCount, 1);
+  assert.equal(result.searchAttempts, 1);
   assert.ok(result.sources.every((source) => source.riskLevel !== "high"));
   assert.ok(result.sources[0].qualityScore >= result.sources[1].qualityScore);
+});
+
+test("Research MCP retries transient empty search results before succeeding", async () => {
+  let providerCalls = 0;
+  const result = await searchWithResearchMcp("enterprise agent adoption", 2, async () => {
+    providerCalls += 1;
+    if (providerCalls < 3) return [];
+    return [{
+      title: "Enterprise AI adoption study",
+      url: "https://nist.gov/enterprise-ai",
+      content: "Evidence about enterprise AI adoption, governance, deployment and measurable outcomes.".repeat(8),
+    }];
+  }, { maxAttempts: 3, baseDelayMs: 0 });
+
+  assert.equal(providerCalls, 3);
+  assert.equal(result.searchAttempts, 3);
+  assert.equal(result.sources.length, 1);
 });
