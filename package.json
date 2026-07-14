@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:mcp": "tsx --test tests/mcp*.test.ts",
-    "test:store": "tsx --test tests/task-store-concurrency.test.ts"
+    "test:store": "tsx --test tests/task-store-concurrency.test.ts",
+    "eval:safety": "tsx evals/source-policy.eval.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

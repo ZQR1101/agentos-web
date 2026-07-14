@@ -14,6 +14,7 @@
 - **可验证来源**：报告只能依据搜索摘要生成，并展示可点击的原始网页链接。
 - **来源安全策略**：对候选来源执行 URL 校验、去重、质量评分和提示注入特征检测；高风险内容在进入模型上下文前被隔离。
 - **双层质量门禁**：Reviewer 负责语义质量，Harness 程序化核对引用编号、原始 URL 和未授权外链，任一检查失败都会触发修订或终止。
+- **安全评测门禁**：CI 运行 10 个来源策略样本和 5 个引用完整性用例；当前回归集的高风险拒绝召回率与可用来源保留率均为 100%。
 - **任务持久化**：Task、Plan、Sources、Report、Review 和 Events 保存至 `.data/tasks.json`，刷新后仍可恢复。
 - **可观测性**：记录 Agent 交接、当前步骤、Reviewer 分数、执行轮数、失败原因和模型响应 ID。
 - **实时运行快照**：工作台每 1.5 秒同步持久化状态，展示当前 Agent、MCP 调用、Reviewer 修订、执行 ID 与耗时；运行记录页每 3 秒自动刷新。
@@ -91,6 +92,7 @@ src/app/api/mcp/research 标准 Streamable HTTP MCP Endpoint
 src/lib/mcp/             Research MCP Server 与 Harness Client
 src/lib/task-store.ts    本地任务持久化
 src/lib/source-policy.ts 来源评分、提示注入检测与引用校验
+evals/                   Source Policy 标签样本与离线评测脚本
 src/components/ChatBox   工作台和审批交互
 src/components/RunsList  真实运行记录
 src/types/task.ts        Agent 结构化交接协议
@@ -102,6 +104,7 @@ src/types/task.ts        Agent 结构化交接协议
 npm run lint
 npm run test:mcp
 npm run test:store
+npm run eval:safety
 npm run build
 ```
 
@@ -110,13 +113,14 @@ npm run build
 - JSON Task Store 使用进程内写锁与临时文件原子替换，能够处理单进程并发；它仍不适合多实例或 Serverless 生产部署。
 - UI 已通过轮询展示持久化进度，但执行 API 仍是同步请求；生产版本应使用任务队列、SSE 和可取消的后台 Worker。
 - 当前 Source Policy 是启发式规则，生产版本还应增加域名信誉库、发布时间校验、内容抓取验证和专门的安全评测集。
+- 当前 100% 指标仅针对仓库内 10 个小型合成/回归样本，不代表开放网络上的泛化安全性。
 - 远程 MCP 默认关闭；只有同时配置访问令牌和 Host Allowlist 才能开放，避免公开消耗 Tavily 配额。
 
 ## 下一步
 
 1. 将 Task Store 替换为 PostgreSQL，并使用事务、唯一约束和分布式执行租约保证多实例幂等性。
 2. 使用后台 Worker + SSE，实现执行中暂停、取消和实时步骤更新。
-3. 为 Source Policy 增加离线评测数据集和安全回归测试。
+3. 将 Source Policy 评测扩展到真实网页、混淆注入、多语言变体与人工标注数据。
 4. 增加动态 Tool Registry，支持多个 MCP Server 的连接、权限与健康检查。
 
 面试演示流程和简历描述见 [`docs/INTERVIEW.md`](docs/INTERVIEW.md)。
