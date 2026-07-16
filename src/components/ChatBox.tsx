@@ -155,12 +155,19 @@ export default function ChatBox({ initialTaskId = "" }: { initialTaskId?: string
   useEffect(() => {
     if (stage !== "running" || !taskId) return;
     const stream = new EventSource(`/api/tasks/${taskId}/events`);
+    let receivedTerminalSnapshot = false;
     const receive = (event: MessageEvent<string>) => {
       const payload = JSON.parse(event.data) as ResearchPayload;
-      if (payload.task) hydrateTask(payload.task);
+      if (payload.task) {
+        receivedTerminalSnapshot = payload.task.status !== "running";
+        if (receivedTerminalSnapshot) stream.close();
+        hydrateTask(payload.task);
+      }
     };
     stream.addEventListener("snapshot", receive);
-    stream.onerror = () => setError("实时事件连接暂时中断，浏览器将自动重连。");
+    stream.onerror = () => {
+      if (!receivedTerminalSnapshot && stream.readyState !== EventSource.CLOSED) setError("实时事件连接暂时中断，浏览器将自动重连。");
+    };
     return () => stream.close();
   }, [hydrateTask, stage, taskId]);
 
