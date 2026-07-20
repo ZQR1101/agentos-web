@@ -16,10 +16,10 @@ async function githubFetch<T>(path: string) {
   return response.json() as Promise<T>;
 }
 
-export async function inspectPublicRepository(repository: RepositoryRef): Promise<RepositoryInspection> {
+export async function inspectPublicRepository(repository: RepositoryRef, requestedRef?: string): Promise<RepositoryInspection> {
   const prefix = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`;
   const metadata = await githubFetch<GitHubRepository>(prefix);
-  const branch = metadata.default_branch || repository.defaultBranch;
+  const branch = requestedRef?.trim() || metadata.default_branch || repository.defaultBranch;
   const tree = await githubFetch<GitHubTree>(`${prefix}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
   let packageJson: Record<string, unknown> | undefined;
   try {

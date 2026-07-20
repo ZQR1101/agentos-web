@@ -5,13 +5,13 @@ import { inspectPublicRepository, readPublicRepositoryFiles, readPublicRepositor
 loadEnvConfig(process.cwd());
 
 void (async () => {
-  const [repositoryName, issueValue] = process.argv.slice(2);
+  const [repositoryName, issueValue, requestedRef] = process.argv.slice(2);
   const [owner, name] = (repositoryName ?? "").split("/");
   const issueNumber = Number(issueValue);
-  if (!owner || !name || !Number.isInteger(issueNumber) || issueNumber <= 0) throw new Error("用法：npm run audit:issue -- owner/repository issue-number");
+  if (!owner || !name || !Number.isInteger(issueNumber) || issueNumber <= 0) throw new Error("用法：npm run audit:issue -- owner/repository issue-number [ref]");
 
   const repository = { provider: "github" as const, owner, name, defaultBranch: "main" };
-  const [issue, inspection] = await Promise.all([readPublicRepositoryIssue(repository, issueNumber), inspectPublicRepository(repository)]);
+  const [issue, inspection] = await Promise.all([readPublicRepositoryIssue(repository, issueNumber), inspectPublicRepository(repository, requestedRef)]);
   const issueText = `${issue.title}\n${issue.body}`;
   const selected = selectBugEvidenceFiles(inspection.files, issueText);
   const files = await readPublicRepositoryFiles({ ...repository, defaultBranch: inspection.branch }, selected);
