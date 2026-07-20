@@ -34,44 +34,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: MCP contract test
-        run: npm run test:mcp
+      - name: AgentOS Runtime tests
+        run: npm run test:v1
 
-      - name: Task Store concurrency test
-        run: npm run test:store
-
-      - name: Harness budget test
-        run: npm run test:harness
-
-      - name: Skill contract test
-        run: npm run test:skills
-
-      - name: Tool policy test
-        run: npm run test:tools
-
-      - name: Runtime health test
-        run: npm run test:health
-
-      - name: Source diversity test
-        run: npm run test:source
-
-      - name: Background workflow test
-        run: npm run test:workflow
-
-      - name: SSE task event test
-        run: npm run test:events
-
-      - name: Workflow end-to-end test
-        run: npm run test:e2e
-
-      - name: Queue mode test
-        run: npm run test:queue
-
-      - name: Model observability test
-        run: npm run test:observability
-
-      - name: Source Policy safety evaluation
-        run: npm run eval:safety
+      - name: Software Agent evaluation
+        run: npm run eval:software
 
       - name: Production build
         run: npm run build

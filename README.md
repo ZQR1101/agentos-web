@@ -1,167 +1,93 @@
 # AgentOS
 
-[![CI](https://github.com/ZQR1101/agentos-web/actions/workflows/ci.yml/badge.svg)](https://github.com/ZQR1101/agentos-web/actions/workflows/ci.yml)
+面向 GitHub 软件工程团队的受控 Multi-Agent Runtime。第一阶段聚焦只读的软件工程分析：代码库分析、Bug 定位和 PR 审查。
 
-一个面向 Agent 开发实习作品集的可控调研 Agent。它不是普通聊天页面，而是一个包含真实多 Agent 协作、网页检索、人工审批、任务持久化和执行追踪的 Agent Runtime 原型。
+## 产品定位
 
-## 项目亮点
+AgentOS 不试图替代代码模型。它负责让模型在企业工程流程中可控地运行：明确角色、最小权限、人工审批、预算限制、完整 Trace 和可复核的质量结论。
 
-- **真实 Multi-Agent**：Planner 输出结构化 JSON 计划；Executor 调用 Tavily 检索并基于来源写报告；Reviewer 独立评分和提出修订要求。
-- **真实 MCP 接入**：Research MCP Server 使用官方 TypeScript SDK 暴露 `search_web`；Harness 通过 MCP Client 完成初始化、工具发现和工具调用，并对瞬时空结果执行有限指数退避重试。
-- **真实 Skill Registry**：`research-report` 与 `source-review` 是带版本、输入输出契约、工具声明和可执行方法的能力包；后端与 Skills 页面读取同一份注册表，任务持久化实际 Skill 版本。
-- **默认拒绝的 Tool Policy**：工具页与 Harness 共享注册表；未注册、禁用、作用域不符或缺少明确审批的工具调用都会被拒绝。目前只开放只读 `agentos-research/search_web`。
-- **运行环境健康检查**：工作台只显示 Key 是否配置、当前模型与远程 MCP 是否启用，不暴露任何密钥；缺少 DeepSeek/Tavily 时会在审批前阻止执行。
-- **真实 Harness 预算**：每个外部动作在执行前统一扣减步骤、模型调用和工具调用预算，同时检查总耗时；超限立即失败关闭，不依赖 Prompt 自觉停止。
-- **受控 Agent Loop**：Reviewer 未通过时由 Harness 触发一次修订；默认最多 8 个外部步骤、5 次模型调用、3 次工具调用和 180 秒，避免无限循环与失控消耗。
-- **幂等执行与并发保护**：Harness 通过原子状态转换获取唯一执行权；重复请求复用运行中或已完成的任务，不会重复产生模型与搜索费用。
-- **Human-in-the-loop**：外部搜索和模型调用前必须获得用户批准，任务可在审批节点暂停和恢复。
-- **可验证来源**：报告只能依据搜索摘要生成，并展示可点击的原始网页链接。
-- **来源质量、时效与证据覆盖**：对候选来源执行 URL 校验、去重、质量评分、类型/可信度/时效标注和提示注入检测；报告完成后结算来源广度、类型多样性、高可信来源、近期来源与有效引用覆盖。未知发布时间会明确显示为未提供，不会伪造日期。
-- **双层质量门禁**：Reviewer 负责语义质量，Harness 程序化核对引用编号、原始 URL 和未授权外链，任一检查失败都会触发修订或终止。
-- **确定性引用渲染**：Writer 只输出 `[来源 N]`；服务端按来源编号生成最终 URL，并移除模型输出的其他外链，避免模型手抄链接破坏白名单。
-- **安全评测门禁**：CI 运行 10 个来源策略样本和 5 个引用完整性用例；当前回归集的高风险拒绝召回率与可用来源保留率均为 100%。
-- **可切换持久化与队列**：默认使用 JSON Task Store + 进程内 Worker；配置 `DATABASE_URL` 与 `REDIS_URL` 后切换为 PostgreSQL 事务存储 + BullMQ 独立 Worker。
-- **可观测性**：记录 Agent 交接、当前步骤、Reviewer 分数、执行轮数、失败原因和模型响应 ID。
-- **Token、延迟与成本估算**：逐次记录 Planner / Executor / Reviewer 的耗时、Token、响应 ID；仅在配置每百万 Token 单价后展示估算成本，不把估算当作平台账单。
-- **后台 Worker + SSE**：审批后 API 立即返回，单进程 Worker 在后台执行；工作台通过 SSE 接收持久化快照，并支持协作式取消后续步骤。
-
-## 架构
-
-```mermaid
-flowchart LR
-    UI["Next.js 工作台"] --> API["Task API / Research API"]
-    API --> CLAIM["Atomic Execution Claim"]
-    CLAIM --> H["Harness"]
-    H --> P["Planner Agent"]
-    P -->|"ResearchPlan JSON"| MC["MCP Client"]
-    MC -->|"tools/list + tools/call"| MS["Research MCP Server"]
-    MS --> T["Tavily Search"]
-    T --> SP["Source Policy"]
-    SP -->|"安全来源"| E["Executor Agent"]
-    E -->|"Markdown Report"| CV["Citation Validator"]
-    CV --> R["Reviewer Agent"]
-    R -->|"approved"| DONE["持久化结果"]
-    R -->|"revisionInstructions"| E
-    H --> STORE["Task Store"]
+```text
+代码库 / Issue / PR Diff
+        ↓
+Planner → Repository Tool → 专项分析 Agent → Reviewer
+        ↓
+带代码证据的分析报告
 ```
 
-## 执行流程
+第一版严格只读：不修改文件、不创建分支、不创建 PR、不自动合并。
 
-1. 用户创建任务，服务端生成 Task 并保存。
-2. 系统停在审批节点；用户可以批准、暂停或稍后恢复。
-3. Harness 原子地将 Task 从待审批切换为执行中并写入 `executionId`；并发请求只能复用已有执行。随后启用预算执行器，每次外部动作前先持久化授权和用量。
-4. Planner 将目标转换为 `searchQuery`、`subquestions` 和 `successCriteria`。
-5. Harness 与 Research MCP Server 建立连接，执行 `tools/list` 发现 `search_web`，再通过 `tools/call` 发起搜索。
-6. MCP Tool 调用 Tavily 获取候选来源；瞬时空结果最多重试 3 次，并记录实际尝试次数；Source Policy 校验 URL、清洗摘要、检测提示注入，标注来源类型、可信度与可得发布时间，并按质量排序，最多保留 6 个来源。
-7. Executor 将来源作为不可信数据隔离后交给 DeepSeek，生成带引用的 Markdown 报告。
-8. Harness 先程序化校验引用编号、URL 和外链白名单，再由 Reviewer 返回结构化审核结果。
-9. 任一质量门禁未通过时最多修订一次；通过后保存报告、执行 ID、MCP 调用轨迹、Harness 预算结算、来源评分、证据覆盖度和完整事件记录。
+## 首批业务场景
 
-单次任务至少调用 DeepSeek 3 次；触发修订时最多调用 5 次。
+### 代码库分析
 
-## 技术栈
+针对“分析这个项目的认证流程”一类问题，Agent 读取目录和代码、搜索相关符号、构建调用链，经 Reviewer 复核后输出架构说明与风险。
 
-- Next.js 16、React 19、TypeScript、Tailwind CSS
-- DeepSeek OpenAI-compatible Chat Completions API
-- Tavily Search API
-- Model Context Protocol TypeScript SDK 1.29（InMemory + Streamable HTTP）
-- React Markdown + GFM
-- PostgreSQL（可选生产 Task Store）+ Redis/BullMQ（可选独立 Worker 队列）
+### Bug 定位
+
+针对“用户登录失败，帮我分析”一类 Issue，Agent 关联 Issue、日志和代码路径，输出有证据的根因、影响范围和最小修改建议。
+
+### PR 审查
+
+输入 PR diff 后，Security、Code Review 与 Test 角色分别检查安全风险、设计回归和测试缺口，再由 Reviewer 汇总风险等级和建议。
+
+## Runtime 能力
+
+- Task Management：状态机、队列、重试、取消与恢复。
+- Agent Planning：结构化计划、角色交接和工作流约束。
+- Tool Registry：工具契约、作用域、预算和默认拒绝策略。
+- Permission / Approval：最小权限与明确审批。
+- Trace：模型、工具、状态、成本和决策日志。
+- Evaluation：证据覆盖、质量复核和可解释的完成条件。
+
+详细架构见 [docs/AGENTOS_RUNTIME.md](docs/AGENTOS_RUNTIME.md)。
+
+## 当前实现
+
+- Next.js 16、React 19、TypeScript、Tailwind CSS。
+- 本地 JSON 零配置存储，以及面向多实例部署的 PostgreSQL 任务存储。
+- 独立 Worker 通过事务行锁和可续期租约领取任务，支持指数退避重试、取消、手动重试和过期租约恢复。
+- 任务状态、尝试次数、失败原因和完整 Trace 持久化。
+- 结构化 Runtime / Agent / Reviewer / Tool Span：记录每次尝试的耗时、状态、错误和只读工具属性；未接入模型时明确标记 Token 未采集。
+- 组织/仓库级审批策略：按精确仓库、组织通配和全局规则校验审批人身份、角色与工具权限，并持久化允许/拒绝决策。
+- 多租户任务边界：任务绑定 `organizationId`，API、详情页、评估和 PostgreSQL 查询按组织隔离；Worker 仅在内部保留全局队列视角。
+- GitHub App Webhook：校验 HMAC-SHA256 签名，以 delivery ID 幂等处理 PR 更新和 Issue 标签事件，并通过 installation 映射组织后创建等待审批任务。
+- 受控 Harness：模型、工具、步骤和耗时预算。
+- Software Engineering Agent 的只读工作流契约与控制台：`/engineering`。
+- GitHub MCP：仓库树、受限文件内容、Issue、PR 元数据和受限 diff。
+- 三条可执行业务链路：Code Understanding、Bug Triage、PR Review。
+- PR Review 的安全、质量、测试规则，diff 新行号证据和独立 Reviewer 汇总。
+- Evaluation 看板：人工接受/退回结论、自动证据评分、重试率、完成率和业务 Agent 对比。
+- 版本化离线基准：固定 9 条真实 GitHub PR/Issue 的 SHA 快照与 7 条合成边界用例，输出真实/合成通过率、PR precision/recall，以及按仓库、语言、风险类型划分的表现。
+- 可选 GitHub App 安装令牌认证，可访问获授权的私有仓库。
 
 ## 本地运行
 
 ```bash
 npm install
-Copy-Item .env.example .env.local
 npm run dev
 ```
 
-在 `.env.local` 配置：
+打开 `http://localhost:3000`。
 
-```env
-DEEPSEEK_API_KEY=你的密钥
-DEEPSEEK_MODEL=deepseek-v4-flash
-# 可选：用于任务成本估算；不填时仍记录 Token 和延迟，但不显示成本。
-DEEPSEEK_INPUT_PRICE_PER_1M_USD=输入每百万 Token 的美元单价
-DEEPSEEK_OUTPUT_PRICE_PER_1M_USD=输出每百万 Token 的美元单价
-TAVILY_API_KEY=你的密钥
-# 可选：启用带认证的远程 MCP Endpoint
-MCP_ACCESS_TOKEN=一段足够长的随机值
-MCP_ALLOWED_HOSTS=localhost:3000,127.0.0.1:3000
-# 可选：生产模式。两项要同时配置，再额外启动 npm run worker。
-DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/agentos
-REDIS_URL=redis://HOST:6379
-```
-
-打开 `http://localhost:3000`。不要提交 `.env.local` 或在截图、Issue 中暴露完整密钥。
-
-### 生产队列模式
-
-本地开发不需要安装 PostgreSQL 或 Redis：未配置时，应用仍使用 JSON 文件和进程内 Worker。要以多进程方式运行，请配置 `DATABASE_URL` 与 `REDIS_URL`，先初始化表结构，再分别启动 Web 与 Worker：
+生产模式配置 `DATABASE_URL` 和 `AGENTOS_INLINE_WORKER=false`，然后分别启动 Web 与 Worker：
 
 ```bash
 npm run db:migrate
-npm run build
 npm run start
-# 在另一个终端
 npm run worker
-```
-
-Web 进程只负责审批、原子领取任务和投递 BullMQ；独立 Worker 从 Redis 取任务，并通过 PostgreSQL 读取、更新同一个 Task。若只配置 Redis 而没有 PostgreSQL，系统会拒绝入队并显示明确错误，避免 Worker 与 Web 使用两份任务状态。
-
-## 主要目录
-
-```text
-src/app/api/tasks/       Task 创建、查询、暂停、恢复与重试
-src/app/api/research/    Multi-Agent Loop 与外部工具调用
-src/app/api/mcp/research 标准 Streamable HTTP MCP Endpoint
-src/lib/harness-budget  步骤、模型、工具与耗时预算执行器
-src/lib/mcp/             Research MCP Server 与 Harness Client
-src/lib/skills/          版本化 Skill 定义、契约、执行器与注册表
-src/lib/tool-policy.ts   默认拒绝的工具注册与授权策略
-src/lib/task-store.ts    JSON / PostgreSQL 双模式任务持久化
-src/lib/postgres-task-store.ts PostgreSQL 事务适配器
-src/lib/task-worker.ts   进程内 / BullMQ 双模式任务队列
-src/worker.ts            BullMQ 独立 Worker 入口
-src/lib/source-policy.ts 来源评分、提示注入检测与引用校验
-evals/                   Source Policy 标签样本与离线评测脚本
-src/components/ChatBox   工作台和审批交互
-src/components/RunsList  真实运行记录
-src/types/task.ts        Agent 结构化交接协议
 ```
 
 ## 验证
 
 ```bash
-npm run lint
-npm run test:mcp
-npm run test:store
-npm run test:harness
-npm run test:skills
-npm run test:tools
-npm run test:health
-npm run test:workflow
-npm run test:events
-npm run test:e2e
-npm run test:queue
-npm run test:observability
-npm run eval:safety
+npx tsx --test tests/software-engineering-workflow.test.ts
+npm run eval:software
+npm run test:postgres-race
 npm run build
 ```
 
-## 当前边界
-
-- 未配置 `DATABASE_URL` / `REDIS_URL` 时会使用 JSON + 进程内 Worker，适合本地演示但不适合多实例或 Serverless。生产队列模式已经提供 PostgreSQL 事务存储与 BullMQ 独立 Worker；仍需由部署环境提供高可用 PostgreSQL、Redis、备份和监控。
-- SSE 和协作式取消已可用；取消会阻止后续 Agent 步骤，但无法强制中止已经发出的第三方 HTTP 请求。
-- 当前 Source Policy 的类型、可信度、发布时间和证据覆盖度是可解释的启发式元数据，不能代替域名信誉库、原文抓取、逐句事实核验或人工编辑审核。
-- 当前 100% 指标仅针对仓库内 10 个小型合成/回归样本，不代表开放网络上的泛化安全性。
-- 远程 MCP 默认关闭；只有同时配置访问令牌和 Host Allowlist 才能开放，避免公开消耗 Tavily 配额。
-
 ## 下一步
 
-1. 加入分布式执行租约与 Worker 崩溃后的任务回收机制。
-2. 将取消信号传播到外部 HTTP 请求。
-3. 将 Source Policy 评测扩展到真实网页、混淆注入、多语言变体与人工标注数据。
-4. 增加动态 Tool Registry，支持多个 MCP Server 的连接、权限与健康检查。
-
-面试演示流程和简历描述见 [`docs/INTERVIEW.md`](docs/INTERVIEW.md)。
+1. 持续扩充经过双人复核的真实 Issue / PR 样本，按仓库、语言和风险类型分层衡量根因准确率与审查误报率。
+2. 增加组织、仓库级策略和审批人身份，形成真正的多租户权限边界。
+3. 将模型调用、Token、耗时和工具预算纳入统一 Trace 与成本看板。

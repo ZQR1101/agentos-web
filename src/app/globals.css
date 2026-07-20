@@ -1,32 +1,71 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f7fb;
-  --foreground: #172033;
-  --muted: #64748b;
-  --line: #e4e8f0;
-  --panel: #ffffff;
-  --brand: #4f46e5;
+  --ink: #edf4ff;
+  --muted: #8fa3bf;
+  --line: rgba(147, 173, 210, .16);
+  --panel: rgba(14, 27, 49, .82);
+  --panel-strong: #111f38;
+  --brand: #47e6c2;
+  --brand-deep: #14b89a;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: var(--background);
-  color: var(--foreground);
+  color: var(--ink);
   font-family: Arial, Helvetica, sans-serif;
+  background: #07111f;
 }
 
 button, input { font: inherit; }
+button { cursor: pointer; }
 
-.report-markdown h1 { margin: 0 0 1rem; font-size: 1.5rem; font-weight: 600; color: #172033; }
-.report-markdown h2 { margin: 1.5rem 0 .6rem; font-size: 1.15rem; font-weight: 600; color: #172033; }
-.report-markdown h3 { margin: 1.25rem 0 .5rem; font-size: 1rem; font-weight: 600; color: #172033; }
+.app-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 79% -8%, rgba(47, 202, 180, .15), transparent 29rem),
+    radial-gradient(circle at 35% 100%, rgba(72, 103, 216, .16), transparent 34rem),
+    #07111f;
+}
+
+.workspace { position: relative; }
+.workspace::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .22;
+  background-image: linear-gradient(rgba(157, 189, 230, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(157, 189, 230, .045) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Scoped utility retheme: existing components retain their behaviour while gaining a unified console surface. */
+.app-shell .bg-white { background-color: var(--panel) !important; }
+.app-shell .bg-slate-50 { background-color: rgba(11, 24, 45, .72) !important; }
+.app-shell .bg-slate-100 { background-color: rgba(133, 161, 198, .12) !important; }
+.app-shell .border-slate-100, .app-shell .border-slate-200, .app-shell .border-slate-300 { border-color: var(--line) !important; }
+.app-shell .text-slate-900, .app-shell .text-slate-800, .app-shell .text-slate-700 { color: var(--ink) !important; }
+.app-shell .text-slate-600, .app-shell .text-slate-500 { color: var(--muted) !important; }
+.app-shell .text-slate-400 { color: #6e829f !important; }
+.app-shell .text-indigo-600, .app-shell .text-indigo-700 { color: #60e9cd !important; }
+.app-shell .bg-indigo-600 { background: linear-gradient(135deg, var(--brand), #26baac) !important; color: #05231f !important; }
+.app-shell .bg-indigo-50 { background: rgba(71, 230, 194, .1) !important; }
+.app-shell .border-indigo-100, .app-shell .border-indigo-200 { border-color: rgba(71, 230, 194, .22) !important; }
+.app-shell .bg-indigo-50\/40 { background-color: rgba(71, 230, 194, .06) !important; }
+.app-shell .bg-emerald-50 { background-color: rgba(43, 207, 151, .10) !important; }
+.app-shell .bg-amber-50 { background-color: rgba(250, 184, 61, .10) !important; }
+.app-shell .bg-red-50 { background-color: rgba(248, 113, 113, .10) !important; }
+.app-shell input { color: var(--ink); background: rgba(5, 15, 30, .72) !important; border-color: rgba(143, 169, 204, .22) !important; }
+.app-shell input::placeholder { color: #617591; }
+.app-shell main h1 { letter-spacing: -.04em; }
+.app-shell main { position: relative; }
+.app-shell .shadow-sm { box-shadow: 0 18px 45px rgba(0, 0, 0, .16) !important; }
+
+.report-markdown h1 { margin: 0 0 1rem; font-size: 1.5rem; font-weight: 600; color: var(--ink); }
+.report-markdown h2 { margin: 1.5rem 0 .6rem; font-size: 1.15rem; font-weight: 600; color: var(--ink); }
+.report-markdown h3 { margin: 1.25rem 0 .5rem; font-size: 1rem; font-weight: 600; color: var(--ink); }
 .report-markdown p { margin: .6rem 0; line-height: 1.8; }
 .report-markdown ul, .report-markdown ol { margin: .6rem 0; padding-left: 1.4rem; }
 .report-markdown ul { list-style: disc; }
 .report-markdown ol { list-style: decimal; }
 .report-markdown li { margin: .35rem 0; line-height: 1.75; }
-.report-markdown a { color: #4338ca; text-decoration: underline; text-underline-offset: 2px; }
-.report-markdown strong { font-weight: 600; color: #172033; }
+.report-markdown a { color: #60e9cd; text-decoration: underline; text-underline-offset: 2px; }
+.report-markdown strong { font-weight: 600; color: var(--ink); }
