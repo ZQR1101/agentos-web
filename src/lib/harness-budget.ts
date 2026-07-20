@@ -1,4 +1,6 @@
-import type { HarnessBudgetSnapshot, HarnessLimits, HarnessUsage } from "@/types/task";
+export type HarnessLimits = { maxSteps: number; maxModelCalls: number; maxToolCalls: number; maxDurationMs: number };
+export type HarnessUsage = { steps: number; modelCalls: number; toolCalls: number; elapsedMs: number; lastAction?: string };
+export type HarnessBudgetSnapshot = { limits: HarnessLimits; usage: HarnessUsage };
 
 export const DEFAULT_HARNESS_LIMITS: HarnessLimits = {
   maxSteps: 8,

@@ -1,0 +1,316 @@
+{
+  "version": "2026-07-20.v4",
+  "cases": [
+    {
+      "id": "pr-dynamic-execution-without-tests",
+      "type": "pr_review",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["security", "testing"],
+      "files": [{ "path": "src/runner.ts", "patch": "@@ -4,0 +5,2 @@\n+const output = eval(input);\n+return output;" }],
+      "expected": [
+        { "category": "security", "severity": "high", "title": "动态代码执行" },
+        { "category": "testing", "severity": "medium", "title": "生产代码变更缺少测试变更" }
+      ]
+    },
+    {
+      "id": "pr-safe-change-with-tests",
+      "type": "pr_review",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["clean_change"],
+      "files": [
+        { "path": "src/normalize.ts", "patch": "@@ -1 +1 @@\n-export const normalize = (value) => value;\n+export const normalize = (value) => value.trim();" },
+        { "path": "tests/normalize.test.ts", "patch": "@@ -2,0 +3 @@\n+expect(normalize(' x ')).toBe('x');" }
+      ],
+      "expected": []
+    },
+    {
+      "id": "pr-hardcoded-secret",
+      "type": "pr_review",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["security", "testing"],
+      "files": [{ "path": "src/config.ts", "patch": "@@ -1,0 +2 @@\n+const apiKey = 'abcdefghijk12345';" }],
+      "expected": [
+        { "category": "security", "severity": "high", "title": "疑似硬编码凭据" },
+        { "category": "testing", "severity": "medium", "title": "生产代码变更缺少测试变更" }
+      ]
+    },
+    {
+      "id": "pr-quality-todo-with-test",
+      "type": "pr_review",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["quality"],
+      "files": [
+        { "path": "src/cache.ts", "patch": "@@ -3,0 +4 @@\n+// TODO remove fallback after migration" },
+        { "path": "tests/cache.test.ts", "patch": "@@ -5,0 +6 @@\n+expect(readCache()).toBeDefined();" }
+      ],
+      "expected": [{ "category": "quality", "severity": "low", "title": "变更中遗留待办" }]
+    },
+    {
+      "id": "bug-early-branch-exit",
+      "type": "bug_triage",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["root_cause"],
+      "issueText": "patternProperties ignores additionalProperties false",
+      "files": [{ "path": "from-json-schema.ts", "content": "if (schema.patternProperties) {\n  buildPattern();\n  break;\n}\nif (schema.additionalProperties === false) {\n  buildStrict();\n}" }],
+      "expectedMinFindings": 1,
+      "expectedTerms": ["patternProperties", "additionalProperties"]
+    },
+    {
+      "id": "bug-no-control-flow-conflict",
+      "type": "bug_triage",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["clean_change", "root_cause"],
+      "issueText": "token validation error handling",
+      "files": [{ "path": "auth.ts", "content": "if (token) {\n  validate(token);\n}\nif (error) {\n  report(error);\n}" }],
+      "expectedMinFindings": 0,
+      "expectedMaxFindings": 0,
+      "expectedTerms": []
+    },
+    {
+      "id": "bug-chinese-weak-task-list-retrieval",
+      "type": "bug_triage",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["retrieval"],
+      "issueText": "工程任务页面的任务列表加载失败，数据库暂时不可用时接口报错",
+      "files": [
+        { "path": "src/app/api/engineering/tasks/route.ts", "content": "export async function GET() {\n  return NextResponse.json({ tasks: await listEngineeringTasks(organization.id) });\n}" },
+        { "path": "src/components/EngineeringTaskList.tsx", "content": "const response = await fetch('/api/engineering/tasks');\nconst payload = await response.json();" },
+        { "path": "src/lib/postgres-engineering-task-store.ts", "content": "export async function listPostgresEngineeringTasks() {\n  const result = await getPool().query('SELECT task FROM engineering_tasks');\n  return result.rows;\n}" },
+        { "path": "src/lib/github-webhook.ts", "content": "export function verifyGitHubWebhookSignature() { return true; }" },
+        { "path": "src/app/chat/page.tsx", "content": "export default function ChatPage() { return null; }" }
+      ],
+      "expectedMinFindings": 0,
+      "expectedMaxFindings": 0,
+      "expectedTerms": [],
+      "expectedMinEvidence": 3,
+      "expectedCoverage": "matched",
+      "expectedSelectedFiles": [
+        "src/app/api/engineering/tasks/route.ts",
+        "src/components/EngineeringTaskList.tsx",
+        "src/lib/postgres-engineering-task-store.ts"
+      ]
+    },
+    {
+      "id": "bug-engineering-domain-missing-on-branch",
+      "type": "bug_triage",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["retrieval"],
+      "issueText": "工程任务列表加载失败，数据库暂时不可用",
+      "files": [
+        { "path": "src/app/api/tasks/route.ts", "content": "return NextResponse.json({ tasks: await listTasks() });" },
+        { "path": "src/lib/postgres-task-store.ts", "content": "const result = await getPool().query('SELECT * FROM tasks');" },
+        { "path": "src/components/MessageList.tsx", "content": "export function MessageList() { return null; }" }
+      ],
+      "expectedMinFindings": 0,
+      "expectedMaxFindings": 0,
+      "expectedTerms": [],
+      "expectedMinEvidence": 2,
+      "expectedCoverage": "context_mismatch"
+    },
+    {
+      "id": "architecture-cross-file-call",
+      "type": "call_graph",
+      "origin": "synthetic",
+      "language": "TypeScript",
+      "riskTypes": ["architecture"],
+      "files": [
+        { "path": "src/login.ts", "content": "import { verifyToken } from './token';\nexport function login() { verifyToken(); }" },
+        { "path": "src/token.ts", "content": "export function verifyToken() { return true; }" }
+      ],
+      "expectedEdges": [{ "from": "login", "to": "verifyToken" }]
+    },
+    {
+      "id": "real-fastify-pr-6838-find-route-method-normalization",
+      "type": "pr_review",
+      "origin": "real",
+      "language": "JavaScript",
+      "riskTypes": ["clean_change", "testing"],
+      "source": {
+        "kind": "github_pr",
+        "repository": "fastify/fastify",
+        "number": 6838,
+        "url": "https://github.com/fastify/fastify/pull/6838",
+        "baseSha": "94bcbcc6e2ef3b8e8f8e8797fe551ccbe7b942fd",
+        "headSha": "37e41eadc54a2ef9234c1e9f3ca3dec77ee1b299",
+        "labelRationale": "空值与小写 method 的兼容修复同时包含两条回归测试，人工标注为不应产生安全、质量或缺测告警。"
+      },
+      "files": [
+        { "path": "lib/route.js", "patch": "@@ -179,7 +179,7 @@ function buildRouting (options) {\n       router.find(\n-        options.method,\n+        options.method?.toUpperCase() ?? '',\n         options.url,\n         options.constraints\n       )" },
+        { "path": "test/find-route.test.js", "patch": "@@ -42,3 +42,17 @@ test('findRoute', async t => {\n+  t.same(fastify.findRoute({ url: '/' }), undefined)\n+  t.same(fastify.findRoute({ method: 'get', url: '/' }), route)\n })" }
+      ],
+      "expected": []
+    },
+    {
+      "id": "real-fastify-pr-6823-request-doc-fix",
+      "type": "pr_review",
+      "origin": "real",
+      "language": "Markdown",
+      "riskTypes": ["clean_change"],
+      "source": {
+        "kind": "github_pr",
+        "repository": "fastify/fastify",
+        "number": 6823,
+        "url": "https://github.com/fastify/fastify/pull/6823",
+        "baseSha": "6682c4f9a76cbb60c372ba5cad9dd2fc6e2fdb51",
+        "headSha": "66fe7950972ea14dbe0e5048687874eb810ef46d",
+        "labelRationale": "仅修正文档中的 validateInput 描述，不应被代码审查规则误报。"
+      },
+      "files": [
+        { "path": "docs/Reference/Request.md", "patch": "@@ -264,7 +264,7 @@ request.validateInput(input, schema, httpPart)\n-`validateInput` validates input data and returns a validation result.\n+`validateInput` validates input data and returns the validated value." }
+      ],
+      "expected": []
+    },
+    {
+      "id": "real-fastify-pr-6832-query-method-with-tests",
+      "type": "pr_review",
+      "origin": "real",
+      "language": "JavaScript",
+      "riskTypes": ["clean_change", "testing"],
+      "source": {
+        "kind": "github_pr",
+        "repository": "fastify/fastify",
+        "number": 6832,
+        "url": "https://github.com/fastify/fastify/pull/6832",
+        "baseSha": "94bcbcc6e2ef3b8e8f8e8797fe551ccbe7b942fd",
+        "headSha": "0966d2f82e36e89d06af66d9c738b0119490505c",
+        "labelRationale": "RFC 10008 QUERY 方法实现附带独立测试文件；当前规则范围内人工标注为无安全、质量或缺测告警。"
+      },
+      "files": [
+        { "path": "fastify.js", "patch": "@@ -270,6 +270,7 @@ function fastify (options) {\n+  fastify.query = route.bind(fastify, { method: 'QUERY' })" },
+        { "path": "lib/handle-request.js", "patch": "@@ -22,6 +22,10 @@ function handleRequest (err, request, reply) {\n+  if (request.raw.method === 'QUERY' && request.headers['content-type'] === undefined) {\n+    request.body = null\n+  }" },
+        { "path": "test/rfc-10008.test.js", "patch": "@@ -0,0 +1,8 @@\n+'use strict'\n+const { test } = require('node:test')\n+test('QUERY request is routed', async t => {\n+  const response = await fastify.inject({ method: 'QUERY', url: '/' })\n+  t.assert.strictEqual(response.statusCode, 200)\n+})" }
+      ],
+      "expected": []
+    },
+    {
+      "id": "real-zod-issue-6198-pattern-properties-break",
+      "type": "bug_triage",
+      "origin": "real",
+      "language": "TypeScript",
+      "riskTypes": ["root_cause"],
+      "source": {
+        "kind": "github_issue",
+        "repository": "colinhacks/zod",
+        "number": 6198,
+        "url": "https://github.com/colinhacks/zod/issues/6198",
+        "commitSha": "912f0f51b0ced654d0069741e7160834dca742ee",
+        "labelRationale": "Issue 给出了可复现行为；人工核对固定提交后，根因是 patternProperties 分支的 break 跳过后续 additionalProperties 处理。"
+      },
+      "issueText": "patternProperties ignores additionalProperties false",
+      "files": [
+        { "path": "packages/zod/src/v4/classic/from-json-schema.ts", "content": "if (schema.patternProperties) {\n  const patterns = Object.entries(schema.patternProperties);\n  result = buildPatternRecords(patterns);\n  break;\n}\nif (schema.additionalProperties === false) {\n  result = strictObject(result);\n}" }
+      ],
+      "expectedMinFindings": 1,
+      "expectedTerms": ["patternProperties", "additionalProperties"]
+    },
+    {
+      "id": "real-flask-pr-6086-hardcoded-secret-key",
+      "type": "pr_review",
+      "origin": "real",
+      "language": "Python",
+      "riskTypes": ["security"],
+      "source": {
+        "kind": "github_pr",
+        "repository": "pallets/flask",
+        "number": 6086,
+        "url": "https://github.com/pallets/flask/pull/6086",
+        "baseSha": "36e4a824f340fdee7ed50937ba8e7f6bc7d17f81",
+        "headSha": "02b143f2da3960bdf26766afeaf3ca76f080eb3a",
+        "disposition": "closed_unmerged",
+        "labelRationale": "PR 向 Flask app.py 顶部加入可直接使用的 SECRET_KEY，且最终未合并；人工标注为高风险硬编码凭据。"
+      },
+      "files": [{ "path": "src/flask/app.py", "patch": "@@ -1,3 +1,4 @@\n+SECRET_KEY = \"hardcoded_secret_key_12345abcdefgh\"\n from __future__ import annotations" }],
+      "expected": [{ "category": "security", "severity": "high", "title": "疑似硬编码凭据" }]
+    },
+    {
+      "id": "real-flask-pr-6079-doc-wording",
+      "type": "pr_review",
+      "origin": "real",
+      "language": "Python",
+      "riskTypes": ["clean_change"],
+      "source": {
+        "kind": "github_pr",
+        "repository": "pallets/flask",
+        "number": 6079,
+        "url": "https://github.com/pallets/flask/pull/6079",
+        "baseSha": "36e4a824f340fdee7ed50937ba8e7f6bc7d17f81",
+        "headSha": "1c317d21475ee82e56ae4813fb8a7c2c3f3c60b6",
+        "disposition": "closed_unmerged",
+        "labelRationale": "只修改 API 文档语法和措辞，不应产生代码风险告警。"
+      },
+      "files": [{ "path": "docs/api.rst", "patch": "@@ -347,7 +347,7 @@\n-   This signal is sent before template rendering process.\n+   This signal is sent before the template rendering process.\n@@ -459,7 +459,7 @@\n-   is the application. This is usually useful for unittests in order to\n+   is the application. This is usually useful for unit tests in order to" }],
+      "expected": []
+    },
+    {
+      "id": "real-gin-pr-4714-status-flush-with-tests",
+      "type": "pr_review",
+      "origin": "real",
+      "language": "Go",
+      "riskTypes": ["clean_change", "testing"],
+      "source": {
+        "kind": "github_pr",
+        "repository": "gin-gonic/gin",
+        "number": 4714,
+        "url": "https://github.com/gin-gonic/gin/pull/4714",
+        "baseSha": "da1e108614ecbbadfa5736b1b297b16121d23b9b",
+        "headSha": "065f526e702a43ae06a84a318e5fc4180b0423bb",
+        "disposition": "closed_unmerged",
+        "labelRationale": "状态码刷新修复附带覆盖无 body 与普通状态码的回归测试；人工标注为当前规则范围内无风险发现。"
+      },
+      "files": [
+        { "path": "context.go", "patch": "@@ -1112,6 +1112,9 @@ func (c *Context) Status(code int) {\n \tc.Writer.WriteHeader(code)\n+\tif !bodyAllowedForStatus(code) {\n+\t\tc.Writer.WriteHeaderNow()\n+\t}" },
+        { "path": "context_test.go", "patch": "@@ -1898,0 +1899,8 @@\n+func TestContextStatusFlushesNoBodyCodes(t *testing.T) {\n+\tw := httptest.NewRecorder()\n+\tc, _ := CreateTestContext(w)\n+\tc.Status(http.StatusNoContent)\n+\tassert.Equal(t, http.StatusNoContent, w.Code)\n+}" }
+      ],
+      "expected": []
+    },
+    {
+      "id": "real-gin-pr-4717-bindxml-doc-symbol",
+      "type": "pr_review",
+      "origin": "real",
+      "language": "Go",
+      "riskTypes": ["clean_change"],
+      "source": {
+        "kind": "github_pr",
+        "repository": "gin-gonic/gin",
+        "number": 4717,
+        "url": "https://github.com/gin-gonic/gin/pull/4717",
+        "baseSha": "03f3e420a3c370659359fb4deb99a474229b215a",
+        "headSha": "9a825d95f17be3d9caab7342eab3b7b831970b0e",
+        "disposition": "merged",
+        "labelRationale": "已合并的一行 GoDoc 符号修正，不改变运行时代码，不应产生风险告警。"
+      },
+      "files": [{ "path": "context.go", "patch": "@@ -787,7 +787,7 @@\n-// BindXML is a shortcut for c.MustBindWith(obj, binding.BindXML).\n+// BindXML is a shortcut for c.MustBindWith(obj, binding.XML)." }],
+      "expected": []
+    },
+    {
+      "id": "real-typescript-pr-63604-whitespace-todo",
+      "type": "pr_review",
+      "origin": "real",
+      "language": "TypeScript",
+      "riskTypes": ["clean_change", "testing", "quality"],
+      "source": {
+        "kind": "github_pr",
+        "repository": "microsoft/TypeScript",
+        "number": 63604,
+        "url": "https://github.com/microsoft/TypeScript/pull/63604",
+        "baseSha": "637d5746b70257028fb95aad32ddec6b26ab0a14",
+        "headSha": "b71e7b93c2510420809117d2ca3e6d9d4b7bf2a3",
+        "disposition": "closed_unmerged",
+        "labelRationale": "功能修复包含 fourslash 测试；diff 中 TODO 只是空白对齐后的等价重加，人工标注为不应产生新增待办误报。"
+      },
+      "files": [
+        { "path": "src/services/completions.ts", "patch": "@@ -592,8 +592,8 @@\n-    All,                            // Every possible keyword (TODO: This is never appropriate)\n+    All,                                    // Every possible keyword (TODO: This is never appropriate)\n@@ -5488,6 +5511,8 @@\n+            case KeywordCompletionFilters.FunctionLikeExpressionBodyKeywords:\n+                return isFunctionLikeBodyKeyword(kind) && kind !== SyntaxKind.DefaultKeyword;" },
+        { "path": "tests/cases/fourslash/completionListAtEndOfWordInArrowFunction02.ts", "patch": "@@ -4,5 +4,6 @@\n-        { name: \"default\", sortText: completion.SortText.GlobalsOrKeywords }\n+    excludes: [\n+        \"default\",\n+    ]" }
+      ],
+      "expected": []
+    }
+  ]
+}

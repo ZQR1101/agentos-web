@@ -13,6 +13,8 @@
 # testing
 /coverage
 /.data/
+/deliverables/
+/structure.txt
 
 # next.js
 /.next/
